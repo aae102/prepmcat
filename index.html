@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ANIYA MCAT | Pro v27</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #1e293b; -webkit-tap-highlight-color: transparent; }
+    .glass-card { background: white; border: 1px solid #e2e8f0; border-radius: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
+    input { outline: none; background: transparent; border: none; }
+    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+    .nav-item.active { color: #4f46e5; }
+    .nav-item.inactive { color: #94a3b8; }
+    .tab-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 10px; border-radius: 12px; flex: 1; text-align: center; }
+    .tab-btn.active { background: #4f46e5; color: white; }
+    .tab-btn.inactive { background: #f1f5f9; color: #64748b; }
+    .btn-link { background: #f1f5f9; color: #475569; padding: 6px 10px; border-radius: 8px; font-size: 9px; font-weight: 800; border: 1px solid #e2e8f0; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body class="pb-24">
+  <div id="root"></div>
+
+  <script type="module">
+    import { h, render } from 'https://esm.sh/preact';
+    import { useEffect, useMemo, useRef, useState } from 'https://esm.sh/preact/hooks';
+    import htm from 'https://esm.sh/htm';
+
+    const html = htm.bind(h);
+    const toYMD = (d) => d.toISOString().split('T')[0];
+    const todayStr = "2025-12-29";
+    const testDateStr = "2026-06-12";
+
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('home');
+      const [plannerTab, setPlannerTab] = useState('content');
+      const chartRef = useRef(null);
+      const chartInstance = useRef(null);
+      
+      const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v27_done')) || {});
+      const [anki, setAnki] = useState(() => JSON.parse(localStorage.getItem('aniya_v27_anki')) || [{id: 1, date: todayStr, count: 0}]);
+      const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v27_acc')) || []);
+      const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v27_fl')) || [
+        { id: 'diag', date: '2025-12-21', source: 'Diagnostic', cp: 121, cars: 121, bb: 121, ps: 121 }
+      ]);
+
+      useEffect(() => {
+        localStorage.setItem('aniya_v27_done', JSON.stringify(done));
+        localStorage.setItem('aniya_v27_anki', JSON.stringify(anki));
+        localStorage.setItem('aniya_v27_fl', JSON.stringify(flScores));
+        localStorage.setItem('aniya_v27_acc', JSON.stringify(accuracy));
+        if (activeTab === 'scores') renderChart();
+      }, [done, anki, flScores, accuracy, activeTab]);
+
+      const CONTENT_SEQ = [
+        { tag: 'GC', text: 'Ch 6: Chemical Equilibrium' }, { tag: 'GC', text: 'Ch 7: Thermochemistry' },
+        { tag: 'REST', text: 'RECOVERY DAY' }, { tag: 'GC', text: 'Ch 9: Solutions' },
+        { tag: 'GC', text: 'Ch 10: Acids and Bases' }, { tag: 'GC', text: 'Ch 11/12: Redox' },
+        { tag: 'JW', text: 'JW Gen Chem Discretes' },
+        { tag: 'ORGO/PS', text: 'Orgo 1 + JW Psych Intro' }, { tag: 'ORGO/PS', text: 'Orgo 2 + JW Neurons' },
+        { tag: 'ORGO/PS', text: 'Orgo 3/4 + JW The Brain' }, { tag: 'ORGO/PS', text: 'Orgo 5 + JW Endocrine' },
+        { tag: 'ORGO/PS', text: 'Orgo 6 + JW Genetics' }, { tag: 'ORGO/PS', text: 'Resonance + JW Senses' },
+        { tag: 'ORGO/PS', text: 'Orgo 7 + JW Vision' }, { tag: 'ORGO/PS', text: 'Orgo 8/9 + JW Other Senses' },
+        { tag: 'ORGO/PS', text: 'Orgo 10 + JW Attention' }, 
+        { tag: 'JW', text: 'JW Orgo Discrete Review' },
+        { tag: 'BC', text: 'Ch 1: Amino Acids (P1)' }, { tag: 'BC', text: 'Ch 1: Amino Acids (P2)' },
+        { tag: 'BC', text: 'Ch 2: Enzymes (P1)' }, { tag: 'BC', text: 'Ch 2: Enzymes (P2)' },
+        { tag: 'BC', text: 'Ch 3: Nonenzymatic Proteins' }, { tag: 'BC', text: 'Ch 4: Carbohydrates' },
+        { tag: 'BC', text: 'Ch 5: Lipids' }, { tag: 'BC', text: 'Ch 6: DNA' }, { tag: 'BC', text: 'Ch 7: RNA' },
+        { tag: 'BC', text: 'Ch 8: Bio Membranes' }, { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P1)' },
+        { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P2)' }, { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P1)' },
+        { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P2)' }, { tag: 'BC', text: 'Ch 11: Fatty Acids' },
+        { tag: 'BC', text: 'Ch 12: Bioenergetics' }, { tag: 'JW', text: 'Discrete Biochem Review' },
+        { tag: 'EK', text: 'Physics Lec 1' }, { tag: 'EK', text: 'Physics Lec 2' },
+        { tag: 'EK', text: 'Physics Lec 3' }, { tag: 'EK', text: 'Physics Lec 4' },
+        { tag: 'EK', text: 'Physics Lec 5' }, { tag: 'EK', text: 'Physics Lec 6' },
+        { tag: 'EK', text: 'Physics Lec 7' }, { tag: 'EK', text: 'Physics Lec 8' }, { tag: 'EK', text: 'Physics Lec 9' }
+      ];
+
+      const fullSchedule = useMemo(() => {
+        let dt = new Date("2025-12-29");
+        const plan = {};
+        const dates = [];
+        while (toYMD(dt) <= testDateStr) {
+          const d = toYMD(new Date(dt));
+          dates.push(d);
+          plan[d] = [];
+          if (d === testDateStr) plan[d].push({ id: 'test', tag: 'AAMC', text: '🚀 TEST DAY' });
+          else {
+            if (d === '2026-03-14') plan[d].push({ id: 'fl1', tag: 'FL', text: 'FL #1' });
+            else if (d === '2026-04-04') plan[d].push({ id: 'fl2', tag: 'FL', text: 'FL #2' });
+            else if (d === '2026-04-18') plan[d].push({ id: 'fl3', tag: 'FL', text: 'FL #3' });
+            else if (d === '2026-05-16') plan[d].push({ id: 'fl4', tag: 'FL', text: 'FL #4' });
+
+            const idx = Math.floor((dt - new Date("2025-12-29")) / 86400000);
+            if (CONTENT_SEQ[idx]) plan[d].push({ id: `t-${idx}`, ...CONTENT_SEQ[idx] });
+            else plan[d].push({ id: `p-${idx}`, tag: 'PRACTICE', text: 'UWorld Rotation' });
+            plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' });
+          }
+          dt.setDate(dt.getDate() + 1);
+        }
+        return { plan, dates };
+      }, []);
+
+      const renderChart = () => {
+        if (!chartRef.current) return;
+        if (chartInstance.current) chartInstance.current.destroy();
+        const sorted = [...flScores].sort((a,b) => new Date(a.date) - new Date(b.date));
+        chartInstance.current = new Chart(chartRef.current, {
+          type: 'line',
+          data: {
+            labels: sorted.map(s => s.date.slice(5)),
+            datasets: [
+              { label: 'C/P', data: sorted.map(s => s.cp), borderColor: '#ef4444', tension: 0.3, pointBackgroundColor: '#ef4444' },
+              { label: 'CARS', data: sorted.map(s => s.cars), borderColor: '#f59e0b', tension: 0.3, pointBackgroundColor: '#f59e0b' },
+              { label: 'B/B', data: sorted.map(s => s.bb), borderColor: '#10b981', tension: 0.3, pointBackgroundColor: '#10b981' },
+              { label: 'P/S', data: sorted.map(s => s.ps), borderColor: '#8b5cf6', tension: 0.3, pointBackgroundColor: '#8b5cf6' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 8, font: { size: 10, weight: 'bold' } } } } }
+        });
+      };
+
+      const Icon = (t) => {
+        const p = {
+          home: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+          plan: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+          anki: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+          scores: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+          acc: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+        };
+        return html`<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d=${p[t]} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      };
+
+      return html`
+        <div class="min-h-screen">
+          <header class="p-6 pb-2 flex justify-between items-center bg-white sticky top-0 z-10 border-b border-slate-50">
+            <h1 class="text-xl font-black italic text-indigo-600">ANIYA MCAT</h1>
+            <div class="flex space-x-1">
+              <a href="https://jackwestin.com" target="_blank" class="btn-link">JW</a>
+              <a href="https://app.bootcamp.com/auth?#/signin?redirectTo=/mcat" target="_blank" class="btn-link">CARS</a>
+            </div>
+          </header>
+
+          <main class="p-6 space-y-6">
+            ${activeTab === 'home' && html`
+              <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="glass-card p-5">
+                    <p class="text-[9px] font-black text-slate-400 uppercase">Anki Sync</p>
+                    <input type="number" class="text-3xl font-black text-indigo-600 w-full" 
+                      value=${anki.find(a=>a.date===todayStr)?.count || 0} 
+                      onInput=${e => {
+                        const val = e.target.value;
+                        const idx = anki.findIndex(a => a.date === todayStr);
+                        if (idx !== -1) { let n=[...anki]; n[idx].count=val; setAnki(n); }
+                        else { setAnki([{id:Date.now(), date:todayStr, count:val}, ...anki]); }
+                      }} />
+                  </div>
+                  <div class="glass-card p-5 bg-indigo-600 text-white shadow-lg">
+                    <p class="text-[9px] font-black opacity-60 uppercase">Latest FL</p>
+                    <p class="text-3xl font-black">${flScores[0] ? (flScores[0].cp+flScores[0].cars+flScores[0].bb+flScores[0].ps) : '--'}</p>
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Current Tasks</h3>
+                  ${(fullSchedule.plan[todayStr] || []).map(t => html`
+                    <div onClick=${() => setDone({...done, [t.id]: !done[t.id]})} class="glass-card p-4 flex items-center border-l-4 ${t.tag==='BC'?'border-green-500':t.tag==='CARS'?'border-amber-500':'border-indigo-500'}">
+                      <div class="flex-1">
+                        <p class="text-[9px] font-black uppercase ${t.tag==='BC'?'text-green-500':t.tag==='CARS'?'text-amber-500':'text-indigo-400'}">${t.tag}</p>
+                        <p class=${`text-sm font-bold ${done[t.id]?'line-through text-slate-300':''}`}>${t.text}</p>
+                      </div>
+                      <div class=${`w-5 h-5 rounded-full border-2 ${done[t.id]?'bg-indigo-500 border-indigo-500':'border-slate-100'}`}></div>
+                    </div>
+                  `)}
+                </div>
+              </div>
+            `}
+
+            ${activeTab === 'plan' && html`
+              <div class="space-y-4">
+                <div class="flex space-x-2">
+                  <button onClick=${() => setPlannerTab('content')} class=${`tab-btn ${plannerTab==='content'?'active':'inactive'}`}>Content</button>
+                  <button onClick=${() => setPlannerTab('practice')} class=${`tab-btn ${plannerTab==='practice'?'active':'inactive'}`}>Practice</button>
+                </div>
+                <div class="glass-card max-h-[60vh] overflow-y-auto no-scrollbar">
+                  ${fullSchedule.dates.filter(d => plannerTab === 'content' ? d < '2026-03-01' : d >= '2026-03-01').map(d => html`
+                    <div class=${`p-4 border-b border-slate-50 flex space-x-4 ${d === todayStr ? 'bg-indigo-50' : ''}`}>
+                      <div class="text-[9px] font-black text-slate-400 w-12 pt-1">${d.slice(5)}</div>
+                      <div class="flex-1 space-y-2">
+                        ${fullSchedule.plan[d].map(t => html`
+                          <div class="flex items-center justify-between">
+                            <span class=${`text-xs font-bold ${done[t.id]?'line-through text-slate-300':''}`}>${t.tag}: ${t.text}</span>
+                            <div onClick=${() => setDone({...done, [t.id]: !done[t.id]})} class=${`w-3 h-3 rounded-sm border ${done[t.id]?'bg-indigo-500 border-indigo-500':'border-slate-200'}`}></div>
+                          </div>
+                        `)}
+                      </div>
+                    </div>
+                  `)}
+                </div>
+              </div>
+            `}
+
+            ${activeTab === 'anki' && html`
+              <div class="space-y-4">
+                <h2 class="font-black uppercase text-sm">Anki Log</h2>
+                ${anki.map(a => html`
+                  <div class="glass-card p-4 flex justify-between items-center">
+                    <div><p class="text-[9px] font-black text-slate-400 uppercase">${a.date}</p><p class="font-bold text-sm">Cards Matured</p></div>
+                    <div class="flex items-center space-x-4">
+                      <input type="number" class="w-12 text-right font-black text-indigo-600" value=${a.count} onInput=${e => setAnki(anki.map(x=>x.id===a.id?{...x, count:e.target.value}:x))} />
+                      <button onClick=${() => setAnki(anki.filter(x=>x.id!==a.id))} class="text-red-300">✕</button>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+
+            ${activeTab === 'scores' && html`
+              <div class="space-y-4">
+                <div class="glass-card p-4 h-64"><canvas ref=${chartRef}></canvas></div>
+                <button onClick=${() => setFlScores([{id:Date.now(), date:todayStr, source:'New FL', cp:125, cars:125, bb:125, ps:125}, ...flScores])} class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase shadow-lg">+ Add FL Result</button>
+                ${flScores.map(s => html`
+                  <div class="glass-card p-4 space-y-3">
+                    <div class="flex justify-between">
+                      <input class="font-black text-xs uppercase" value=${s.source} onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, source:e.target.value}:x))} />
+                      <button onClick=${() => setFlScores(flScores.filter(x=>x.id!==s.id))} class="text-red-400 font-bold text-[10px]">DELETE</button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                      ${['cp','cars','bb','ps'].map(f => html`<div class="text-center"><p class="text-[8px] font-bold uppercase text-slate-300 mb-1">${f}</p><input type="number" class="font-black w-full text-center border-b border-slate-100" value=${s[f]} onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, [f]:Number(e.target.value)}:x))} /></div>`)}
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+
+            ${activeTab === 'acc' && html`
+              <div class="space-y-4">
+                <button onClick=${() => setAccuracy([{id:Date.now(), p:'UWorld', s:'Topic', c:0, t:0}, ...accuracy])} class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase">+ New Log</button>
+                ${accuracy.map(r => html`
+                  <div class="glass-card p-4 flex items-center justify-between">
+                    <div class="flex-1">
+                      <input class="text-[9px] font-black text-indigo-500 uppercase" value=${r.p} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, p:e.target.value}:x))} />
+                      <input class="text-sm font-bold block w-full" value=${r.s} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, s:e.target.value}:x))} />
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      <input type="number" class="w-8 text-center font-black border-b" value=${r.c} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, c:e.target.value}:x))} />
+                      <span class="text-slate-300">/</span>
+                      <input type="number" class="w-8 text-center font-black border-b" value=${r.t} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, t:e.target.value}:x))} />
+                      <button onClick=${() => setAccuracy(accuracy.filter(x=>x.id!==r.id))} class="ml-2 text-red-300">✕</button>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+          </main>
+
+          <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 h-20 flex px-2 z-50">
+            ${['home','plan','anki','scores','acc'].map(t => html`
+              <button onClick=${() => setActiveTab(t)} class=${`nav-item ${activeTab===t?'active':'inactive'}`}>
+                ${Icon(t)} <span>${t}</span>
+              </button>
+            `)}
+          </nav>
+        </div>
+      `;
+    };
+    render(html`<${App} />`, document.getElementById('root'));
+  </script>
+</body>
+</html>
