@@ -31,7 +31,7 @@
 
     const html = htm.bind(h);
     const toYMD = (d) => d.toISOString().split('T')[0];
-    const todayStr = "2025-12-29";
+    const todayStr = toYMD(new Date());;
     const testDateStr = "2026-06-12";
 
     const App = () => {
@@ -271,4 +271,5 @@
     render(html`<${App} />`, document.getElementById('root'));
   </script>
 </body>
+
 </html>
