@@ -138,7 +138,12 @@
       return html`
         <div class="min-h-screen">
           <header class="p-6 pb-2 flex justify-between items-center bg-white sticky top-0 z-10 border-b border-slate-50">
-            <h1 class="text-xl font-black italic text-indigo-600">ANIYA MCAT</h1>
+            <div class="flex flex-col">
+  <h1 class="text-xl font-black italic text-indigo-600 leading-tight">ANIYA MCAT</h1>
+  <input type="date" value=${todayStr} 
+    onChange=${e => setTodayStr(e.target.value)} 
+    class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter" />
+</div>
             <div class="flex space-x-1">
               <a href="https://jackwestin.com" target="_blank" class="btn-link">JW</a>
               <a href="https://app.bootcamp.com/auth?#/signin?redirectTo=/mcat" target="_blank" class="btn-link">CARS</a>
@@ -204,20 +209,47 @@
               </div>
             `}
 
-            ${activeTab === 'anki' && html`
-              <div class="space-y-4">
-                <h2 class="font-black uppercase text-sm">Anki Log</h2>
-                ${anki.map(a => html`
-                  <div class="glass-card p-4 flex justify-between items-center">
-                    <div><p class="text-[9px] font-black text-slate-400 uppercase">${a.date}</p><p class="font-bold text-sm">Cards Matured</p></div>
-                    <div class="flex items-center space-x-4">
-                      <input type="number" class="w-12 text-right font-black text-indigo-600" value=${a.count} onInput=${e => setAnki(anki.map(x=>x.id===a.id?{...x, count:e.target.value}:x))} />
-                      <button onClick=${() => setAnki(anki.filter(x=>x.id!==a.id))} class="text-red-300">✕</button>
-                    </div>
-                  </div>
-                `)}
-              </div>
-            `}
+${activeTab === 'anki' && html`
+  <div class="space-y-4">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="font-black uppercase text-sm">Anki Log</h2>
+      <button 
+        onClick=${() => setAnki([{id: Date.now(), date: todayStr, count: 0}, ...anki])}
+        class="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm"
+      >
+        + Manual Entry
+      </button>
+    </div>
+
+    <div class="space-y-3">
+      ${anki.map(a => html`
+        <div class="glass-card p-4 flex flex-col space-y-3">
+          <div class="flex justify-between items-center">
+            <input 
+              type="date" 
+              class="text-[10px] font-black text-indigo-500 uppercase border-b border-indigo-50"
+              value=${a.date} 
+              onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, date: e.target.value} : x))}
+            />
+            <button onClick=${() => setAnki(anki.filter(x => x.id !== a.id))} class="text-red-300 text-xs">✕</button>
+          </div>
+          
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-sm">Cards Reviewed</span>
+            <div class="flex items-center space-x-2">
+              <input 
+                type="number" 
+                class="w-20 text-right font-black text-indigo-600 text-lg border-b-2 border-slate-100" 
+                value=${a.count} 
+                onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, count: Number(e.target.value)} : x))} 
+              />
+            </div>
+          </div>
+        </div>
+      `)}
+    </div>
+  </div>
+`}
 
             ${activeTab === 'scores' && html`
               <div class="space-y-4">
