@@ -30,7 +30,7 @@
     import htm from 'https://esm.sh/htm';
 
     const html = htm.bind(h);
-    
+
     const getLocalYMD = (date = new Date()) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,14 +41,46 @@
     const todayStr = getLocalYMD();
     const testDateStr = "2026-06-12";
 
+    // Seed your Anki log (only if storage is empty OR it contains only a blank placeholder row)
+    const ANKI_SEED = [
+      { id: 1700, date: '2026-01-07', count: 300 },
+      { id: 1699, date: '2026-01-06', count: 68  },
+      { id: 1698, date: '2026-01-05', count: 163 },
+      { id: 1697, date: '2026-01-04', count: 152 },
+      { id: 1696, date: '2026-01-03', count: 150 },
+      { id: 1695, date: '2026-01-02', count: 165 },
+      { id: 1694, date: '2026-01-01', count: 103 },
+      { id: 1693, date: '2025-12-30', count: 135 },
+      { id: 1692, date: '2025-12-29', count: 299 }
+    ];
+
+    const loadAnki = () => {
+      const raw = localStorage.getItem('aniya_v29_anki');
+      if (!raw) return ANKI_SEED;
+
+      try {
+        const parsed = JSON.parse(raw);
+        const isBlankPlaceholder =
+          Array.isArray(parsed) &&
+          parsed.length === 1 &&
+          parsed[0] &&
+          parsed[0].count === 0 &&
+          parsed[0].date === todayStr;
+
+        return isBlankPlaceholder ? ANKI_SEED : parsed;
+      } catch {
+        return ANKI_SEED;
+      }
+    };
+
     const App = () => {
       const [activeTab, setActiveTab] = useState('home');
       const [plannerTab, setPlannerTab] = useState('content');
       const chartRef = useRef(null);
       const chartInstance = useRef(null);
-      
+
       const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_done')) || {});
-      const [anki, setAnki] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_anki')) || [{id: 1, date: todayStr, count: 0}]);
+      const [anki, setAnki] = useState(() => loadAnki());
       const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_acc')) || []);
       const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_fl')) || [
         { id: 'diag', date: '2025-12-21', source: 'Diagnostic', cp: 121, cars: 121, bb: 121, ps: 121 }
@@ -73,12 +105,36 @@
         "2026-01-04": [{ tag: 'REST', text: '☀️ SUNDAY REST (Optional Anki)' }]
       };
 
+      // Re-added Full Lengths (dates only)
+      const FL_PLAN = {
+        "2026-03-16": [{ tag: "AAMC", text: "Full Length #1" }],
+        "2026-03-17": [{ tag: "REVIEW", text: "FL #1 Review" }],
+
+        "2026-03-30": [{ tag: "AAMC", text: "Full Length #2" }],
+        "2026-03-31": [{ tag: "REVIEW", text: "FL #2 Review" }],
+
+        "2026-04-13": [{ tag: "AAMC", text: "Full Length #3" }],
+        "2026-04-14": [{ tag: "REVIEW", text: "FL #3 Review" }],
+
+        "2026-04-27": [{ tag: "AAMC", text: "Full Length #4" }],
+        "2026-04-28": [{ tag: "REVIEW", text: "FL #4 Review" }],
+
+        "2026-05-11": [{ tag: "AAMC", text: "Full Length #5" }],
+        "2026-05-12": [{ tag: "REVIEW", text: "FL #5 Review" }],
+
+        "2026-05-25": [{ tag: "AAMC", text: "Full Length #6" }],
+        "2026-05-26": [{ tag: "REVIEW", text: "FL #6 Review" }],
+
+        "2026-06-01": [{ tag: "AAMC", text: "Full Length #7 (Optional)" }],
+        "2026-06-02": [{ tag: "REVIEW", text: "FL #7 Review (Optional)" }]
+      };
+
       const CONTENT_SEQ = [
         { tag: 'ORGO/PS', text: 'Orgo 1 + JW Psych Intro' }, { tag: 'ORGO/PS', text: 'Orgo 2 + JW Neurons' },
         { tag: 'ORGO/PS', text: 'Orgo 3/4 + JW The Brain' }, { tag: 'ORGO/PS', text: 'Orgo 5 + JW Endocrine' },
         { tag: 'ORGO/PS', text: 'Orgo 6 + JW Genetics' }, { tag: 'ORGO/PS', text: 'Resonance + JW Senses' },
         { tag: 'ORGO/PS', text: 'Orgo 7 + JW Vision' }, { tag: 'ORGO/PS', text: 'Orgo 8/9 + JW Other Senses' },
-        { tag: 'ORGO/PS', text: 'Orgo 10 + JW Attention' }, 
+        { tag: 'ORGO/PS', text: 'Orgo 10 + JW Attention' },
         { tag: 'JW', text: 'JW Orgo Discrete Review' },
         { tag: 'BC', text: 'Ch 1: Amino Acids (P1)' }, { tag: 'BC', text: 'Ch 1: Amino Acids (P2)' },
         { tag: 'BC', text: 'Ch 2: Enzymes (P1)' }, { tag: 'BC', text: 'Ch 2: Enzymes (P2)' },
@@ -102,9 +158,9 @@
 
         while (getLocalYMD(dt) <= testDateStr) {
           const d = getLocalYMD(dt);
-          const dayNum = dt.getDay(); 
+          const dayNum = dt.getDay();
           dates.push(d);
-          
+
           if (HISTORICAL_PLAN[d]) {
             plan[d] = HISTORICAL_PLAN[d].map((t, i) => ({ id: `hist-${d}-${i}`, ...t }));
           } else if (d === '2026-01-05') {
@@ -112,6 +168,8 @@
               { id: 't-0105', tag: 'JW', text: 'JW Gen Chem Discretes' },
               { id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' }
             ];
+          } else if (FL_PLAN[d]) {
+            plan[d] = FL_PLAN[d].map((t, i) => ({ id: `fl-${d}-${i}`, ...t }));
           } else if (dayNum === 0) {
             plan[d] = [{ id: `rest-${d}`, tag: 'REST', text: '☀️ SUNDAY REST (Optional Anki)' }];
           } else if (d === testDateStr) {
@@ -126,6 +184,7 @@
             }
             plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' });
           }
+
           dt.setDate(dt.getDate() + 1);
         }
         return { plan, dates };
@@ -146,7 +205,14 @@
               { label: 'P/S', data: sorted.map(s => s.ps), borderColor: '#8b5cf6', tension: 0.3, pointBackgroundColor: '#8b5cf6' }
             ]
           },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 8, font: { size: 10, weight: 'bold' } } } } }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 8, font: { size: 10, weight: 'bold' } } } },
+            scales: {
+              y: { min: 118, max: 132, ticks: { stepSize: 1 } }
+            }
+          }
         });
       };
 
@@ -180,15 +246,15 @@
                 <div class="grid grid-cols-2 gap-4">
                   <div class="glass-card p-5">
                     <p class="text-[9px] font-black text-slate-400 uppercase">Anki Sync</p>
-                    <input type="number" class="text-3xl font-black text-indigo-600 w-full" 
-                      value=${anki.find(a=>a.date===todayStr)?.count || 0} 
+                    <input type="number" class="text-3xl font-black text-indigo-600 w-full"
+                      value=${anki.find(a=>a.date===todayStr)?.count || 0}
                       onInput=${e => {
                         const val = Number(e.target.value);
                         const idx = anki.findIndex(a => a.date === todayStr);
-                        if (idx !== -1) { 
-                          let n=[...anki]; n[idx].count=val; setAnki(n); 
-                        } else { 
-                          setAnki([{id:Date.now(), date:todayStr, count:val}, ...anki]); 
+                        if (idx !== -1) {
+                          let n=[...anki]; n[idx].count=val; setAnki(n);
+                        } else {
+                          setAnki([{id:Date.now(), date:todayStr, count:val}, ...anki]);
                         }
                       }} />
                   </div>
@@ -310,6 +376,7 @@
         </div>
       `;
     };
+
     render(html`<${App} />`, document.getElementById('root'));
   </script>
 </body>
