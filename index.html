@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>ANIYA MCAT | Pro v29</title>
+  <title>ANIYA MCAT | Pro v30 (Practice Pivot)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
@@ -41,6 +41,13 @@
     const todayStr = getLocalYMD();
     const testDateStr = "2026-06-12";
 
+    // ====== PRACTICE PIVOT (v30) ======
+    // Phase 1 = Jan-Feb: Practice-driven schedule (practice -> review -> targeted content -> CARS)
+    const PRACTICE_PIVOT_START = "2026-01-10";
+    const PHASE2_START = "2026-03-01"; // your existing “practice” tab split
+
+    const isSunday = (dt) => dt.getDay() === 0;
+
     // Seed your Anki log (only if storage is empty OR it contains only a blank placeholder row)
     const ANKI_SEED = [
       { id: 1700, date: '2026-01-07', count: 300 },
@@ -55,7 +62,7 @@
     ];
 
     const loadAnki = () => {
-      const raw = localStorage.getItem('aniya_v29_anki');
+      const raw = localStorage.getItem('aniya_v30_anki');
       if (!raw) return ANKI_SEED;
 
       try {
@@ -79,18 +86,19 @@
       const chartRef = useRef(null);
       const chartInstance = useRef(null);
 
-      const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_done')) || {});
+      const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_done')) || {});
       const [anki, setAnki] = useState(() => loadAnki());
-      const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_acc')) || []);
-      const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v29_fl')) || [
-        { id: 'diag', date: '2025-12-21', source: 'Diagnostic', cp: 121, cars: 121, bb: 121, ps: 121 }
+      const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_acc')) || []);
+      const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_fl')) || [
+        // Updated to match your screenshot-style baseline
+        { id: 'diag', date: '2025-12-21', source: 'Diagnostic', cp: 120, cars: 122, bb: 122, ps: 118 }
       ]);
 
       useEffect(() => {
-        localStorage.setItem('aniya_v29_done', JSON.stringify(done));
-        localStorage.setItem('aniya_v29_anki', JSON.stringify(anki));
-        localStorage.setItem('aniya_v29_fl', JSON.stringify(flScores));
-        localStorage.setItem('aniya_v29_acc', JSON.stringify(accuracy));
+        localStorage.setItem('aniya_v30_done', JSON.stringify(done));
+        localStorage.setItem('aniya_v30_anki', JSON.stringify(anki));
+        localStorage.setItem('aniya_v30_fl', JSON.stringify(flScores));
+        localStorage.setItem('aniya_v30_acc', JSON.stringify(accuracy));
         if (activeTab === 'scores') renderChart();
       }, [done, anki, flScores, accuracy, activeTab]);
 
@@ -129,6 +137,8 @@
         "2026-06-02": [{ tag: "REVIEW", text: "FL #7 Review (Optional)" }]
       };
 
+      // Your old “topic list” becomes an OPTIONAL “targeted content anchor”
+      // (We still keep it, but it shows up as TARGET after practice + review in Phase 1.)
       const CONTENT_SEQ = [
         { tag: 'ORGO/PS', text: 'Orgo 1 + JW Psych Intro' }, { tag: 'ORGO/PS', text: 'Orgo 2 + JW Neurons' },
         { tag: 'ORGO/PS', text: 'Orgo 3/4 + JW The Brain' }, { tag: 'ORGO/PS', text: 'Orgo 5 + JW Endocrine' },
@@ -150,6 +160,20 @@
         { tag: 'EK', text: 'Physics Lec 7' }, { tag: 'EK', text: 'Physics Lec 8' }, { tag: 'EK', text: 'Physics Lec 9' }
       ];
 
+      // Phase 1 daily stack: practice -> review -> targeted -> cars
+      const phase1Tasks = (d, contentText = null) => {
+        const tasks = [];
+        tasks.push({ id: `p-${d}`, tag: 'PRACTICE', text: 'Timed Mixed Set (15–20 Q) — CP/BB rotation' });
+        tasks.push({ id: `rev-${d}`, tag: 'REVIEW', text: 'Review misses + guesses → make 3–8 “error cards”' });
+        if (contentText) {
+          tasks.push({ id: `t-${d}`, tag: 'TARGET', text: `Targeted patch (from misses): ${contentText}` });
+        } else {
+          tasks.push({ id: `t-${d}`, tag: 'TARGET', text: 'Targeted patch (from misses): 1 weak concept only' });
+        }
+        tasks.push({ id: `c-${d}`, tag: 'CARS', text: '2 Passages (timed)' });
+        return tasks;
+      };
+
       const fullSchedule = useMemo(() => {
         let dt = new Date("2025-12-29T12:00:00");
         const plan = {};
@@ -158,35 +182,71 @@
 
         while (getLocalYMD(dt) <= testDateStr) {
           const d = getLocalYMD(dt);
-          const dayNum = dt.getDay();
           dates.push(d);
 
+          // HISTORICAL (locked)
           if (HISTORICAL_PLAN[d]) {
             plan[d] = HISTORICAL_PLAN[d].map((t, i) => ({ id: `hist-${d}-${i}`, ...t }));
-          } else if (d === '2026-01-05') {
+            dt.setDate(dt.getDate() + 1);
+            continue;
+          }
+
+          // Special: 2026-01-05 legacy day
+          if (d === '2026-01-05') {
             plan[d] = [
               { id: 't-0105', tag: 'JW', text: 'JW Gen Chem Discretes' },
               { id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' }
             ];
-          } else if (FL_PLAN[d]) {
-            plan[d] = FL_PLAN[d].map((t, i) => ({ id: `fl-${d}-${i}`, ...t }));
-          } else if (dayNum === 0) {
-            plan[d] = [{ id: `rest-${d}`, tag: 'REST', text: '☀️ SUNDAY REST (Optional Anki)' }];
-          } else if (d === testDateStr) {
-            plan[d] = [{ id: 'test', tag: 'AAMC', text: '🚀 TEST DAY' }];
-          } else {
-            plan[d] = [];
-            if (CONTENT_SEQ[seqIdx]) {
-              plan[d].push({ id: `s-${seqIdx}`, ...CONTENT_SEQ[seqIdx] });
-              seqIdx++;
-            } else {
-              plan[d].push({ id: `u-${d}`, tag: 'PRACTICE', text: 'UWorld Rotation' });
-            }
-            plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' });
+            dt.setDate(dt.getDate() + 1);
+            continue;
           }
+
+          // FL plan dates (locked)
+          if (FL_PLAN[d]) {
+            plan[d] = FL_PLAN[d].map((t, i) => ({ id: `fl-${d}-${i}`, ...t }));
+            dt.setDate(dt.getDate() + 1);
+            continue;
+          }
+
+          // Sundays = rest
+          if (isSunday(dt)) {
+            plan[d] = [{ id: `rest-${d}`, tag: 'REST', text: '☀️ SUNDAY REST (Optional light Anki)' }];
+            dt.setDate(dt.getDate() + 1);
+            continue;
+          }
+
+          // Test day
+          if (d === testDateStr) {
+            plan[d] = [{ id: 'test', tag: 'AAMC', text: '🚀 TEST DAY' }];
+            dt.setDate(dt.getDate() + 1);
+            continue;
+          }
+
+          // ===== Phase 1 (Jan-Feb): PRACTICE FIRST =====
+          if (d >= PRACTICE_PIVOT_START && d < PHASE2_START) {
+            // Still let CONTENT_SEQ act like a “target anchor” while finishing Orgo/P/S etc.
+            const anchor = CONTENT_SEQ[seqIdx] ? CONTENT_SEQ[seqIdx].text : null;
+
+            plan[d] = phase1Tasks(d, anchor).map((t) => ({ ...t }));
+            if (CONTENT_SEQ[seqIdx]) seqIdx++; // advance anchor slowly
+            dt.setDate(dt.getDate() + 1);
+            continue;
+          }
+
+          // ===== Phase 2+ (Mar-June): your original logic =====
+          // After content anchors run out, fall into UWorld rotation.
+          plan[d] = [];
+          if (CONTENT_SEQ[seqIdx]) {
+            plan[d].push({ id: `s-${seqIdx}`, ...CONTENT_SEQ[seqIdx] });
+            seqIdx++;
+          } else {
+            plan[d].push({ id: `u-${d}`, tag: 'PRACTICE', text: 'UWorld Rotation' });
+          }
+          plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' });
 
           dt.setDate(dt.getDate() + 1);
         }
+
         return { plan, dates };
       }, []);
 
@@ -227,6 +287,34 @@
         return html`<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d=${p[t]} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
       };
 
+      const tagBorder = (tag) => {
+        if (tag === 'CARS') return 'border-amber-500';
+        if (tag === 'REST') return 'border-yellow-400';
+        if (tag === 'PRACTICE') return 'border-indigo-500';
+        if (tag === 'REVIEW') return 'border-slate-500';
+        if (tag === 'TARGET') return 'border-emerald-500';
+        if (tag === 'AAMC') return 'border-indigo-600';
+        if (tag === 'REVIEW') return 'border-slate-500';
+        return 'border-indigo-500';
+      };
+
+      const tagColor = (tag) => {
+        if (tag === 'CARS') return 'text-amber-500';
+        if (tag === 'REST') return 'text-yellow-500';
+        if (tag === 'PRACTICE') return 'text-indigo-500';
+        if (tag === 'REVIEW') return 'text-slate-500';
+        if (tag === 'TARGET') return 'text-emerald-500';
+        if (tag === 'AAMC') return 'text-indigo-600';
+        return 'text-indigo-400';
+      };
+
+      const latestFLTotal = () => {
+        if (!flScores || flScores.length === 0) return '--';
+        // assume newest is first in array (since +Add inserts at top)
+        const s = flScores[0];
+        return (Number(s.cp)||0) + (Number(s.cars)||0) + (Number(s.bb)||0) + (Number(s.ps)||0);
+      };
+
       return html`
         <div class="min-h-screen">
           <header class="p-6 pb-2 flex justify-between items-center bg-white sticky top-0 z-10 border-b border-slate-50">
@@ -257,18 +345,20 @@
                           setAnki([{id:Date.now(), date:todayStr, count:val}, ...anki]);
                         }
                       }} />
+                    <p class="text-[10px] font-bold text-slate-400 mt-2">Tip: keep daily Anki as “error cards” + formulas.</p>
                   </div>
                   <div class="glass-card p-5 bg-indigo-600 text-white shadow-lg">
                     <p class="text-[9px] font-black opacity-60 uppercase">Latest FL</p>
-                    <p class="text-3xl font-black">${flScores[0] ? (flScores[0].cp+flScores[0].cars+flScores[0].bb+flScores[0].ps) : '--'}</p>
+                    <p class="text-3xl font-black">${latestFLTotal()}</p>
                   </div>
                 </div>
+
                 <div class="space-y-3">
                   <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Current Tasks</h3>
                   ${(fullSchedule.plan[todayStr] || []).map(t => html`
-                    <div onClick=${() => setDone({...done, [t.id]: !done[t.id]})} class="glass-card p-4 flex items-center border-l-4 ${t.tag==='BC'||t.tag==='JW'?'border-green-500':t.tag==='CARS'?'border-amber-500':t.tag==='REST'?'border-yellow-400':'border-indigo-500'}">
+                    <div onClick=${() => setDone({...done, [t.id]: !done[t.id]})} class="glass-card p-4 flex items-center border-l-4 ${tagBorder(t.tag)}">
                       <div class="flex-1">
-                        <p class="text-[9px] font-black uppercase ${t.tag==='BC'||t.tag==='JW'?'text-green-500':t.tag==='CARS'?'text-amber-500':t.tag==='REST'?'text-yellow-500':'text-indigo-400'}">${t.tag}</p>
+                        <p class="text-[9px] font-black uppercase ${tagColor(t.tag)}">${t.tag}</p>
                         <p class=${`text-sm font-bold ${done[t.id]?'line-through text-slate-300':''}`}>${t.text}</p>
                       </div>
                       <div class=${`w-5 h-5 rounded-full border-2 ${done[t.id]?'bg-indigo-500 border-indigo-500':'border-slate-100'}`}></div>
@@ -285,11 +375,13 @@
                   <button onClick=${() => setPlannerTab('practice')} class=${`tab-btn ${plannerTab==='practice'?'active':'inactive'}`}>Practice</button>
                 </div>
                 <div class="glass-card max-h-[60vh] overflow-y-auto no-scrollbar">
-                  ${fullSchedule.dates.filter(d => plannerTab === 'content' ? d < '2026-03-01' : d >= '2026-03-01').map(d => html`
+                  ${fullSchedule.dates
+                    .filter(d => plannerTab === 'content' ? d < PHASE2_START : d >= PHASE2_START)
+                    .map(d => html`
                     <div class=${`p-4 border-b border-slate-50 flex space-x-4 ${d === todayStr ? 'bg-indigo-50 border-l-4 border-l-indigo-600' : ''}`}>
                       <div class="text-[9px] font-black text-slate-400 w-12 pt-1">${d.slice(5)}</div>
                       <div class="flex-1 space-y-2">
-                        ${fullSchedule.plan[d].map(t => html`
+                        ${(fullSchedule.plan[d] || []).map(t => html`
                           <div class="flex items-center justify-between">
                             <span class=${`text-xs font-bold ${done[t.id]?'line-through text-slate-300':''}`}>${t.tag}: ${t.text}</span>
                             <div onClick=${() => setDone({...done, [t.id]: !done[t.id]})} class=${`w-3 h-3 rounded-sm border ${done[t.id]?'bg-indigo-500 border-indigo-500':'border-slate-200'}`}></div>
@@ -314,13 +406,16 @@
                   ${anki.map(a => html`
                     <div class="glass-card p-4 flex flex-col space-y-3">
                       <div class="flex justify-between items-center">
-                        <input type="date" class="text-[10px] font-black text-indigo-500 uppercase border-b border-indigo-50" value=${a.date} onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, date: e.target.value} : x))} />
+                        <input type="date" class="text-[10px] font-black text-indigo-500 uppercase border-b border-indigo-50" value=${a.date}
+                          onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, date: e.target.value} : x))} />
                         <button onClick=${() => setAnki(anki.filter(x => x.id !== a.id))} class="text-red-300 text-xs">✕</button>
                       </div>
                       <div class="flex justify-between items-center">
                         <span class="font-bold text-sm">Cards Reviewed</span>
-                        <input type="number" class="w-20 text-right font-black text-indigo-600 text-lg border-b-2 border-slate-100" value=${a.count} onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, count: Number(e.target.value)} : x))} />
+                        <input type="number" class="w-20 text-right font-black text-indigo-600 text-lg border-b-2 border-slate-100" value=${a.count}
+                          onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, count: Number(e.target.value)} : x))} />
                       </div>
+                      <p class="text-[10px] text-slate-400 font-bold">Target daily: 100–150 (mostly error cards + formulas).</p>
                     </div>
                   `)}
                 </div>
@@ -330,15 +425,24 @@
             ${activeTab === 'scores' && html`
               <div class="space-y-4">
                 <div class="glass-card p-4 h-64"><canvas ref=${chartRef}></canvas></div>
-                <button onClick=${() => setFlScores([{id:Date.now(), date:todayStr, source:'New FL', cp:125, cars:125, bb:125, ps:125}, ...flScores])} class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase shadow-lg">+ Add FL Result</button>
+                <button onClick=${() => setFlScores([{id:Date.now(), date:todayStr, source:'New FL', cp:125, cars:125, bb:125, ps:125}, ...flScores])}
+                  class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase shadow-lg">+ Add FL Result</button>
                 ${flScores.map(s => html`
                   <div class="glass-card p-4 space-y-3">
                     <div class="flex justify-between">
-                      <input class="font-black text-xs uppercase" value=${s.source} onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, source:e.target.value}:x))} />
-                      <button onClick=${() => setFlScores(flScores.filter(x=>x.id!==s.id))} class="text-red-400 font-bold text-[10px]">DELETE</button>
+                      <input class="font-black text-xs uppercase" value=${s.source}
+                        onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, source:e.target.value}:x))} />
+                      <button onClick=${() => setFlScores(flScores.filter(x=>x.id!==s.id))}
+                        class="text-red-400 font-bold text-[10px]">DELETE</button>
                     </div>
                     <div class="grid grid-cols-4 gap-2">
-                      ${['cp','cars','bb','ps'].map(f => html`<div class="text-center"><p class="text-[8px] font-bold uppercase text-slate-300 mb-1">${f}</p><input type="number" class="font-black w-full text-center border-b border-slate-100" value=${s[f]} onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, [f]:Number(e.target.value)}:x))} /></div>`)}
+                      ${['cp','cars','bb','ps'].map(f => html`
+                        <div class="text-center">
+                          <p class="text-[8px] font-bold uppercase text-slate-300 mb-1">${f}</p>
+                          <input type="number" class="font-black w-full text-center border-b border-slate-100" value=${s[f]}
+                            onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, [f]:Number(e.target.value)}:x))} />
+                        </div>
+                      `)}
                     </div>
                   </div>
                 `)}
@@ -347,18 +451,23 @@
 
             ${activeTab === 'acc' && html`
               <div class="space-y-4">
-                <button onClick=${() => setAccuracy([{id:Date.now(), p:'UWorld', s:'Topic', c:0, t:0}, ...accuracy])} class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase">+ New Log</button>
+                <button onClick=${() => setAccuracy([{id:Date.now(), p:'UWorld', s:'Mixed Set', c:0, t:0}, ...accuracy])}
+                  class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase">+ New Log</button>
                 ${accuracy.map(r => html`
                   <div class="glass-card p-4 flex items-center justify-between">
                     <div class="flex-1">
-                      <input class="text-[9px] font-black text-indigo-500 uppercase" value=${r.p} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, p:e.target.value}:x))} />
-                      <input class="text-sm font-bold block w-full" value=${r.s} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, s:e.target.value}:x))} />
+                      <input class="text-[9px] font-black text-indigo-500 uppercase" value=${r.p}
+                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, p:e.target.value}:x))} />
+                      <input class="text-sm font-bold block w-full" value=${r.s}
+                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, s:e.target.value}:x))} />
                     </div>
                     <div class="flex items-center space-x-2">
-                      <input type="number" class="w-8 text-center font-black border-b" value=${r.c} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, c:Number(e.target.value)}:x))} />
+                      <input type="number" class="w-8 text-center font-black border-b" value=${r.c}
+                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, c:Number(e.target.value)}:x))} />
                       <span class="text-slate-300">/</span>
-                      <input type="number" class="w-8 text-center font-black border-b" value=${r.t} onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, t:Number(e.target.value)}:x))} />
-                      <button onClick=${() => setAccuracy(accuracy.filter(x=>x.id!==r.id))} class="ml-2 text-red-300">✕</button>
+                      <input type="number" class="w-8 text-center font-black border-b" value=${r.t}
+                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, t:Number(e.target.value)}:x))} />
+                      <button onClick=${() => setAccuracy(accuracy.filter(x => x.id !== r.id))} class="ml-2 text-red-300">✕</button>
                     </div>
                   </div>
                 `)}
