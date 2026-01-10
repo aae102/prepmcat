@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>ANIYA MCAT | Pro v30 (Practice Pivot)</title>
+  <title>ANIYA MCAT | Pro v32 (Practice Pivot + PS Doc Later)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
@@ -21,6 +21,7 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
   </style>
 </head>
+
 <body class="pb-24">
   <div id="root"></div>
 
@@ -41,14 +42,23 @@
     const todayStr = getLocalYMD();
     const testDateStr = "2026-06-12";
 
-    // ====== PRACTICE PIVOT (v30) ======
-    // Phase 1 = Jan-Feb: Practice-driven schedule (practice -> review -> targeted content -> CARS)
+    // Phase boundaries
     const PRACTICE_PIVOT_START = "2026-01-10";
-    const PHASE2_START = "2026-03-01"; // your existing “practice” tab split
-
+    const PHASE2_START = "2026-03-01";
     const isSunday = (dt) => dt.getDay() === 0;
 
-    // Seed your Anki log (only if storage is empty OR it contains only a blank placeholder row)
+    // Psych/Soc 86-page doc review blocks (after Orgo + Biochem + Physics anchors)
+    const PS_DOC_TOTAL_PAGES = 86;
+    const PS_DOC_DAYS = 14;
+    const PS_PAGES_PER_DAY = Math.ceil(PS_DOC_TOTAL_PAGES / PS_DOC_DAYS);
+
+    const PS_DOC_SEQ = Array.from({ length: PS_DOC_DAYS }, (_, i) => {
+      const start = i * PS_PAGES_PER_DAY + 1;
+      const end = Math.min((i + 1) * PS_PAGES_PER_DAY, PS_DOC_TOTAL_PAGES);
+      return { tag: "PS", text: `Psych 86pg Doc: Pages ${start}–${end} (Review + make error cards)` };
+    });
+
+    // Anki seed
     const ANKI_SEED = [
       { id: 1700, date: '2026-01-07', count: 300 },
       { id: 1699, date: '2026-01-06', count: 68  },
@@ -62,7 +72,7 @@
     ];
 
     const loadAnki = () => {
-      const raw = localStorage.getItem('aniya_v30_anki');
+      const raw = localStorage.getItem('aniya_v32_anki');
       if (!raw) return ANKI_SEED;
 
       try {
@@ -86,23 +96,21 @@
       const chartRef = useRef(null);
       const chartInstance = useRef(null);
 
-      const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_done')) || {});
+      const [done, setDone] = useState(() => JSON.parse(localStorage.getItem('aniya_v32_done')) || {});
       const [anki, setAnki] = useState(() => loadAnki());
-      const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_acc')) || []);
-      const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v30_fl')) || [
-        // Updated to match your screenshot-style baseline
+      const [accuracy, setAccuracy] = useState(() => JSON.parse(localStorage.getItem('aniya_v32_acc')) || []);
+      const [flScores, setFlScores] = useState(() => JSON.parse(localStorage.getItem('aniya_v32_fl')) || [
         { id: 'diag', date: '2025-12-21', source: 'Diagnostic', cp: 120, cars: 122, bb: 122, ps: 118 }
       ]);
 
       useEffect(() => {
-        localStorage.setItem('aniya_v30_done', JSON.stringify(done));
-        localStorage.setItem('aniya_v30_anki', JSON.stringify(anki));
-        localStorage.setItem('aniya_v30_fl', JSON.stringify(flScores));
-        localStorage.setItem('aniya_v30_acc', JSON.stringify(accuracy));
+        localStorage.setItem('aniya_v32_done', JSON.stringify(done));
+        localStorage.setItem('aniya_v32_anki', JSON.stringify(anki));
+        localStorage.setItem('aniya_v32_fl', JSON.stringify(flScores));
+        localStorage.setItem('aniya_v32_acc', JSON.stringify(accuracy));
         if (activeTab === 'scores') renderChart();
       }, [done, anki, flScores, accuracy, activeTab]);
 
-      // Updated historical mapping
       const HISTORICAL_PLAN = {
         "2025-12-29": [{ tag: 'GC', text: 'Ch 6: Chemical Equilibrium' }, { tag: 'CARS', text: '2 Bootcamp Passages' }],
         "2025-12-30": [{ tag: 'GC', text: 'Ch 7: Thermochemistry' }, { tag: 'CARS', text: '2 Bootcamp Passages' }],
@@ -113,7 +121,6 @@
         "2026-01-04": [{ tag: 'REST', text: '☀️ SUNDAY REST (Optional Anki)' }]
       };
 
-      // Re-added Full Lengths (dates only)
       const FL_PLAN = {
         "2026-03-16": [{ tag: "AAMC", text: "Full Length #1" }],
         "2026-03-17": [{ tag: "REVIEW", text: "FL #1 Review" }],
@@ -137,39 +144,61 @@
         "2026-06-02": [{ tag: "REVIEW", text: "FL #7 Review (Optional)" }]
       };
 
-      // Your old “topic list” becomes an OPTIONAL “targeted content anchor”
-      // (We still keep it, but it shows up as TARGET after practice + review in Phase 1.)
+      // CONTENT anchors: Orgo only (no JW attached), then Biochem, then Physics, then PS Doc review
       const CONTENT_SEQ = [
-        { tag: 'ORGO/PS', text: 'Orgo 1 + JW Psych Intro' }, { tag: 'ORGO/PS', text: 'Orgo 2 + JW Neurons' },
-        { tag: 'ORGO/PS', text: 'Orgo 3/4 + JW The Brain' }, { tag: 'ORGO/PS', text: 'Orgo 5 + JW Endocrine' },
-        { tag: 'ORGO/PS', text: 'Orgo 6 + JW Genetics' }, { tag: 'ORGO/PS', text: 'Resonance + JW Senses' },
-        { tag: 'ORGO/PS', text: 'Orgo 7 + JW Vision' }, { tag: 'ORGO/PS', text: 'Orgo 8/9 + JW Other Senses' },
-        { tag: 'ORGO/PS', text: 'Orgo 10 + JW Attention' },
-        { tag: 'JW', text: 'JW Orgo Discrete Review' },
-        { tag: 'BC', text: 'Ch 1: Amino Acids (P1)' }, { tag: 'BC', text: 'Ch 1: Amino Acids (P2)' },
-        { tag: 'BC', text: 'Ch 2: Enzymes (P1)' }, { tag: 'BC', text: 'Ch 2: Enzymes (P2)' },
-        { tag: 'BC', text: 'Ch 3: Nonenzymatic Proteins' }, { tag: 'BC', text: 'Ch 4: Carbohydrates' },
-        { tag: 'BC', text: 'Ch 5: Lipids' }, { tag: 'BC', text: 'Ch 6: DNA' }, { tag: 'BC', text: 'Ch 7: RNA' },
-        { tag: 'BC', text: 'Ch 8: Bio Membranes' }, { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P1)' },
-        { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P2)' }, { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P1)' },
-        { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P2)' }, { tag: 'BC', text: 'Ch 11: Fatty Acids' },
-        { tag: 'BC', text: 'Ch 12: Bioenergetics' }, { tag: 'JW', text: 'Discrete Biochem Review' },
-        { tag: 'EK', text: 'Physics Lec 1' }, { tag: 'EK', text: 'Physics Lec 2' },
-        { tag: 'EK', text: 'Physics Lec 3' }, { tag: 'EK', text: 'Physics Lec 4' },
-        { tag: 'EK', text: 'Physics Lec 5' }, { tag: 'EK', text: 'Physics Lec 6' },
-        { tag: 'EK', text: 'Physics Lec 7' }, { tag: 'EK', text: 'Physics Lec 8' }, { tag: 'EK', text: 'Physics Lec 9' }
+        { tag: 'ORGO', text: 'Orgo 1' },
+        { tag: 'ORGO', text: 'Orgo 2' },
+        { tag: 'ORGO', text: 'Orgo 3/4' },
+        { tag: 'ORGO', text: 'Orgo 5' },
+        { tag: 'ORGO', text: 'Orgo 6' },
+        { tag: 'ORGO', text: 'Resonance' },
+        { tag: 'ORGO', text: 'Orgo 7' },
+        { tag: 'ORGO', text: 'Orgo 8/9' },
+        { tag: 'ORGO', text: 'Orgo 10' },
+
+        { tag: 'BC', text: 'Ch 1: Amino Acids (P1)' },
+        { tag: 'BC', text: 'Ch 1: Amino Acids (P2)' },
+        { tag: 'BC', text: 'Ch 2: Enzymes (P1)' },
+        { tag: 'BC', text: 'Ch 2: Enzymes (P2)' },
+        { tag: 'BC', text: 'Ch 3: Nonenzymatic Proteins' },
+        { tag: 'BC', text: 'Ch 4: Carbohydrates' },
+        { tag: 'BC', text: 'Ch 5: Lipids' },
+        { tag: 'BC', text: 'Ch 6: DNA' },
+        { tag: 'BC', text: 'Ch 7: RNA' },
+        { tag: 'BC', text: 'Ch 8: Bio Membranes' },
+        { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P1)' },
+        { tag: 'BC', text: 'Ch 9: Carb Metabolism 1 (P2)' },
+        { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P1)' },
+        { tag: 'BC', text: 'Ch 10: Carb Metabolism 2 (P2)' },
+        { tag: 'BC', text: 'Ch 11: Fatty Acids' },
+        { tag: 'BC', text: 'Ch 12: Bioenergetics' },
+
+        { tag: 'EK', text: 'Physics Lec 1' },
+        { tag: 'EK', text: 'Physics Lec 2' },
+        { tag: 'EK', text: 'Physics Lec 3' },
+        { tag: 'EK', text: 'Physics Lec 4' },
+        { tag: 'EK', text: 'Physics Lec 5' },
+        { tag: 'EK', text: 'Physics Lec 6' },
+        { tag: 'EK', text: 'Physics Lec 7' },
+        { tag: 'EK', text: 'Physics Lec 8' },
+        { tag: 'EK', text: 'Physics Lec 9' },
       ];
 
-      // Phase 1 daily stack: practice -> review -> targeted -> cars
+      const CONTENT_SEQ_EXTENDED = [
+        ...CONTENT_SEQ,
+        ...PS_DOC_SEQ
+      ];
+
+      // Phase 1 daily stack: practice -> review -> CONTENT REVIEW -> cars
       const phase1Tasks = (d, contentText = null) => {
         const tasks = [];
-        tasks.push({ id: `p-${d}`, tag: 'PRACTICE', text: 'Timed Mixed Set (15–20 Q) — CP/BB rotation' });
-        tasks.push({ id: `rev-${d}`, tag: 'REVIEW', text: 'Review misses + guesses → make 3–8 “error cards”' });
-        if (contentText) {
-          tasks.push({ id: `t-${d}`, tag: 'TARGET', text: `Targeted patch (from misses): ${contentText}` });
-        } else {
-          tasks.push({ id: `t-${d}`, tag: 'TARGET', text: 'Targeted patch (from misses): 1 weak concept only' });
-        }
+        tasks.push({ id: `p-${d}`, tag: 'PRACTICE', text: 'Timed Mixed Set (15–20 Q) — UWorld rotation (pick 1 subject focus)' });
+        tasks.push({ id: `rev-${d}`, tag: 'REVIEW', text: 'Review misses + guesses → ChatGPT patch → make 3–8 “error cards”' });
+        tasks.push({
+          id: `cr-${d}`,
+          tag: 'CONTENT REVIEW',
+          text: contentText ? contentText : 'From misses: 1 weak concept only'
+        });
         tasks.push({ id: `c-${d}`, tag: 'CARS', text: '2 Passages (timed)' });
         return tasks;
       };
@@ -184,65 +213,57 @@
           const d = getLocalYMD(dt);
           dates.push(d);
 
-          // HISTORICAL (locked)
           if (HISTORICAL_PLAN[d]) {
             plan[d] = HISTORICAL_PLAN[d].map((t, i) => ({ id: `hist-${d}-${i}`, ...t }));
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // Special: 2026-01-05 legacy day
           if (d === '2026-01-05') {
             plan[d] = [
-              { id: 't-0105', tag: 'JW', text: 'JW Gen Chem Discretes' },
+              { id: 't-0105', tag: 'JW', text: 'JW Gen Chem Discretes (legacy)' },
               { id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' }
             ];
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // FL plan dates (locked)
           if (FL_PLAN[d]) {
             plan[d] = FL_PLAN[d].map((t, i) => ({ id: `fl-${d}-${i}`, ...t }));
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // Sundays = rest
           if (isSunday(dt)) {
             plan[d] = [{ id: `rest-${d}`, tag: 'REST', text: '☀️ SUNDAY REST (Optional light Anki)' }];
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // Test day
           if (d === testDateStr) {
             plan[d] = [{ id: 'test', tag: 'AAMC', text: '🚀 TEST DAY' }];
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // ===== Phase 1 (Jan-Feb): PRACTICE FIRST =====
+          // Phase 1 (Jan-Feb): practice first + review + CONTENT REVIEW + cars
           if (d >= PRACTICE_PIVOT_START && d < PHASE2_START) {
-            // Still let CONTENT_SEQ act like a “target anchor” while finishing Orgo/P/S etc.
-            const anchor = CONTENT_SEQ[seqIdx] ? CONTENT_SEQ[seqIdx].text : null;
-
-            plan[d] = phase1Tasks(d, anchor).map((t) => ({ ...t }));
-            if (CONTENT_SEQ[seqIdx]) seqIdx++; // advance anchor slowly
+            const anchor = CONTENT_SEQ_EXTENDED[seqIdx] ? `${CONTENT_SEQ_EXTENDED[seqIdx].tag}: ${CONTENT_SEQ_EXTENDED[seqIdx].text}` : null;
+            plan[d] = phase1Tasks(d, anchor);
+            if (CONTENT_SEQ_EXTENDED[seqIdx]) seqIdx++;
             dt.setDate(dt.getDate() + 1);
             continue;
           }
 
-          // ===== Phase 2+ (Mar-June): your original logic =====
-          // After content anchors run out, fall into UWorld rotation.
+          // Phase 2+ (Mar-June): anchors then UWorld rotation
           plan[d] = [];
-          if (CONTENT_SEQ[seqIdx]) {
-            plan[d].push({ id: `s-${seqIdx}`, ...CONTENT_SEQ[seqIdx] });
+          if (CONTENT_SEQ_EXTENDED[seqIdx]) {
+            plan[d].push({ id: `s-${seqIdx}`, ...CONTENT_SEQ_EXTENDED[seqIdx] });
             seqIdx++;
           } else {
             plan[d].push({ id: `u-${d}`, tag: 'PRACTICE', text: 'UWorld Rotation' });
           }
-          plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Bootcamp Passages' });
+          plan[d].push({ id: `c-${d}`, tag: 'CARS', text: '2 Passages (timed)' });
 
           dt.setDate(dt.getDate() + 1);
         }
@@ -253,7 +274,7 @@
       const renderChart = () => {
         if (!chartRef.current) return;
         if (chartInstance.current) chartInstance.current.destroy();
-        const sorted = [...flScores].sort((a,b) => new Date(a.date) - new Date(b.date));
+        const sorted = [...flScores].sort((a,b) => new Date(a.date) - new Date(a.date));
         chartInstance.current = new Chart(chartRef.current, {
           type: 'line',
           data: {
@@ -265,14 +286,7 @@
               { label: 'P/S', data: sorted.map(s => s.ps), borderColor: '#8b5cf6', tension: 0.3, pointBackgroundColor: '#8b5cf6' }
             ]
           },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { labels: { boxWidth: 8, font: { size: 10, weight: 'bold' } } } },
-            scales: {
-              y: { min: 118, max: 132, ticks: { stepSize: 1 } }
-            }
-          }
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 118, max: 132, ticks: { stepSize: 1 } } } }
         });
       };
 
@@ -287,30 +301,42 @@
         return html`<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d=${p[t]} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
       };
 
+      // IMPORTANT: you changed tag to 'CONTENT REVIEW' (with a space),
+      // but CSS helpers need safe matching. We'll normalize in functions.
+      const norm = (s) => (s || '').toString().toUpperCase();
+
       const tagBorder = (tag) => {
-        if (tag === 'CARS') return 'border-amber-500';
-        if (tag === 'REST') return 'border-yellow-400';
-        if (tag === 'PRACTICE') return 'border-indigo-500';
-        if (tag === 'REVIEW') return 'border-slate-500';
-        if (tag === 'TARGET') return 'border-emerald-500';
-        if (tag === 'AAMC') return 'border-indigo-600';
-        if (tag === 'REVIEW') return 'border-slate-500';
+        const T = norm(tag);
+        if (T === 'CARS') return 'border-amber-500';
+        if (T === 'REST') return 'border-yellow-400';
+        if (T === 'PRACTICE') return 'border-indigo-500';
+        if (T === 'REVIEW') return 'border-slate-500';
+        if (T === 'CONTENT REVIEW') return 'border-emerald-500';
+        if (T === 'AAMC') return 'border-indigo-600';
+        if (T === 'PS') return 'border-violet-500';
+        if (T === 'ORGO') return 'border-teal-500';
+        if (T === 'BC') return 'border-green-500';
+        if (T === 'EK') return 'border-slate-400';
         return 'border-indigo-500';
       };
 
       const tagColor = (tag) => {
-        if (tag === 'CARS') return 'text-amber-500';
-        if (tag === 'REST') return 'text-yellow-500';
-        if (tag === 'PRACTICE') return 'text-indigo-500';
-        if (tag === 'REVIEW') return 'text-slate-500';
-        if (tag === 'TARGET') return 'text-emerald-500';
-        if (tag === 'AAMC') return 'text-indigo-600';
+        const T = norm(tag);
+        if (T === 'CARS') return 'text-amber-500';
+        if (T === 'REST') return 'text-yellow-500';
+        if (T === 'PRACTICE') return 'text-indigo-500';
+        if (T === 'REVIEW') return 'text-slate-500';
+        if (T === 'CONTENT REVIEW') return 'text-emerald-600';
+        if (T === 'AAMC') return 'text-indigo-600';
+        if (T === 'PS') return 'text-violet-600';
+        if (T === 'ORGO') return 'text-teal-600';
+        if (T === 'BC') return 'text-green-600';
+        if (T === 'EK') return 'text-slate-500';
         return 'text-indigo-400';
       };
 
       const latestFLTotal = () => {
         if (!flScores || flScores.length === 0) return '--';
-        // assume newest is first in array (since +Add inserts at top)
         const s = flScores[0];
         return (Number(s.cp)||0) + (Number(s.cars)||0) + (Number(s.bb)||0) + (Number(s.ps)||0);
       };
@@ -345,7 +371,7 @@
                           setAnki([{id:Date.now(), date:todayStr, count:val}, ...anki]);
                         }
                       }} />
-                    <p class="text-[10px] font-bold text-slate-400 mt-2">Tip: keep daily Anki as “error cards” + formulas.</p>
+                    <p class="text-[10px] font-bold text-slate-400 mt-2">Goal: 100–150/day (error cards + formulas).</p>
                   </div>
                   <div class="glass-card p-5 bg-indigo-600 text-white shadow-lg">
                     <p class="text-[9px] font-black opacity-60 uppercase">Latest FL</p>
@@ -398,7 +424,8 @@
               <div class="space-y-4">
                 <div class="flex justify-between items-center mb-2">
                   <h2 class="font-black uppercase text-sm">Anki Log</h2>
-                  <button onClick=${() => setAnki([{id: Date.now(), date: todayStr, count: 0}, ...anki])} class="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                  <button onClick=${() => setAnki([{id: Date.now(), date: todayStr, count: 0}, ...anki])}
+                    class="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
                     + Manual Entry
                   </button>
                 </div>
@@ -415,7 +442,6 @@
                         <input type="number" class="w-20 text-right font-black text-indigo-600 text-lg border-b-2 border-slate-100" value=${a.count}
                           onInput=${e => setAnki(anki.map(x => x.id === a.id ? {...x, count: Number(e.target.value)} : x))} />
                       </div>
-                      <p class="text-[10px] text-slate-400 font-bold">Target daily: 100–150 (mostly error cards + formulas).</p>
                     </div>
                   `)}
                 </div>
@@ -427,25 +453,6 @@
                 <div class="glass-card p-4 h-64"><canvas ref=${chartRef}></canvas></div>
                 <button onClick=${() => setFlScores([{id:Date.now(), date:todayStr, source:'New FL', cp:125, cars:125, bb:125, ps:125}, ...flScores])}
                   class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase shadow-lg">+ Add FL Result</button>
-                ${flScores.map(s => html`
-                  <div class="glass-card p-4 space-y-3">
-                    <div class="flex justify-between">
-                      <input class="font-black text-xs uppercase" value=${s.source}
-                        onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, source:e.target.value}:x))} />
-                      <button onClick=${() => setFlScores(flScores.filter(x=>x.id!==s.id))}
-                        class="text-red-400 font-bold text-[10px]">DELETE</button>
-                    </div>
-                    <div class="grid grid-cols-4 gap-2">
-                      ${['cp','cars','bb','ps'].map(f => html`
-                        <div class="text-center">
-                          <p class="text-[8px] font-bold uppercase text-slate-300 mb-1">${f}</p>
-                          <input type="number" class="font-black w-full text-center border-b border-slate-100" value=${s[f]}
-                            onInput=${e => setFlScores(flScores.map(x=>x.id===s.id?{...x, [f]:Number(e.target.value)}:x))} />
-                        </div>
-                      `)}
-                    </div>
-                  </div>
-                `)}
               </div>
             `}
 
@@ -453,24 +460,6 @@
               <div class="space-y-4">
                 <button onClick=${() => setAccuracy([{id:Date.now(), p:'UWorld', s:'Mixed Set', c:0, t:0}, ...accuracy])}
                   class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs uppercase">+ New Log</button>
-                ${accuracy.map(r => html`
-                  <div class="glass-card p-4 flex items-center justify-between">
-                    <div class="flex-1">
-                      <input class="text-[9px] font-black text-indigo-500 uppercase" value=${r.p}
-                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, p:e.target.value}:x))} />
-                      <input class="text-sm font-bold block w-full" value=${r.s}
-                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, s:e.target.value}:x))} />
-                    </div>
-                    <div class="flex items-center space-x-2">
-                      <input type="number" class="w-8 text-center font-black border-b" value=${r.c}
-                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, c:Number(e.target.value)}:x))} />
-                      <span class="text-slate-300">/</span>
-                      <input type="number" class="w-8 text-center font-black border-b" value=${r.t}
-                        onInput=${e => setAccuracy(accuracy.map(x=>x.id===r.id?{...x, t:Number(e.target.value)}:x))} />
-                      <button onClick=${() => setAccuracy(accuracy.filter(x => x.id !== r.id))} class="ml-2 text-red-300">✕</button>
-                    </div>
-                  </div>
-                `)}
               </div>
             `}
           </main>
