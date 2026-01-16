@@ -61,18 +61,19 @@
       return { tag: "PS", text: `Psych 86pg Doc: Pages ${start}–${end} (Review + make error cards)` };
     });
 
-    // Seed your Anki log (only if storage is empty OR it contains only a blank placeholder row)
-    const ANKI_SEED = [
-      { id: 1700, date: '2026-01-07', count: 300 },
-      { id: 1699, date: '2026-01-06', count: 68  },
-      { id: 1698, date: '2026-01-05', count: 163 },
-      { id: 1697, date: '2026-01-04', count: 152 },
-      { id: 1696, date: '2026-01-03', count: 150 },
-      { id: 1695, date: '2026-01-02', count: 165 },
-      { id: 1694, date: '2026-01-01', count: 103 },
-      { id: 1693, date: '2025-12-30', count: 135 },
-      { id: 1692, date: '2025-12-29', count: 299 }
-    ];
+   // Seed your Anki log
+const ANKI_SEED = [
+  { id: 1704, date: '2026-01-14', count: 107 },
+  { id: 1703, date: '2026-01-13', count: 178 },
+  { id: 1702, date: '2026-01-12', count: 154 },
+  { id: 1701, date: '2026-01-10', count: 129 },
+  { id: 1700, date: '2026-01-09', count: 370 },
+  { id: 1699, date: '2026-01-08', count: 320 },
+  { id: 1698, date: '2026-01-07', count: 300 },
+  { id: 1697, date: '2026-01-06', count: 68  },
+  { id: 1696, date: '2026-01-05', count: 163 },
+  { id: 1695, date: '2026-01-04', count: 152 }
+];
 
     const loadAnki = () => {
       const raw = localStorage.getItem('aniya_v34_anki');
@@ -178,16 +179,14 @@
         { tag: 'BC', text: 'Ch 11: Fatty Acids' },
         { tag: 'BC', text: 'Ch 12: Bioenergetics' },
 
-        // Physics
-        { tag: 'EK', text: 'Physics Lec 1' },
-        { tag: 'EK', text: 'Physics Lec 2' },
-        { tag: 'EK', text: 'Physics Lec 3' },
-        { tag: 'EK', text: 'Physics Lec 4' },
-        { tag: 'EK', text: 'Physics Lec 5' },
-        { tag: 'EK', text: 'Physics Lec 6' },
-        { tag: 'EK', text: 'Physics Lec 7' },
-        { tag: 'EK', text: 'Physics Lec 8' },
-        { tag: 'EK', text: 'Physics Lec 9' },
+        // ACE PHYSICS (SIMPLIFIED) =====
+  { tag: 'ACE', text: 'Physics: Energy & Motion' },
+  { tag: 'ACE', text: 'Physics: Fluids' },
+  { tag: 'ACE', text: 'Physics: Waves (Sound & Light)' },
+  { tag: 'ACE', text: 'Physics: Optics' },
+  { tag: 'ACE', text: 'Physics: Electricity' },
+  { tag: 'ACE', text: 'Physics: Circuits' },
+]
       ];
 
       // Extend with PS doc later
