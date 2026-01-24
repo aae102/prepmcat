@@ -1,0 +1,21 @@
+// 1. Import the functions you need from the SDKs
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore"; // For your database
+import { getAuth } from "firebase/auth";           // For user logins
+
+// 2. Your web app's Firebase configuration (Paste yours here!)
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "med-app-123.firebaseapp.com",
+  projectId: "med-app-123",
+  storageBucket: "med-app-123.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:12345:web:abc123"
+};
+
+// 3. Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// 4. Export the services so you can use them in other files
+export const db = getFirestore(app);
+export const auth = getAuth(app);
