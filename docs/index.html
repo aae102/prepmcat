@@ -195,7 +195,7 @@
         saveTimer.current = setTimeout(async () => {
           try {
             const docRef = doc(db, "users", user.uid);
-            await setDoc(docRef, data, { merge: true });
+            await setDoc(docRef, data); // overwrite doc so deletions actually persist
           } catch (err) {
             console.error("Sync error:", err);
           } finally {
@@ -1007,4 +1007,5 @@
   </script>
 </body>
 </html>
+
 
