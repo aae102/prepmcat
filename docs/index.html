@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MCAT TRACKER | Ultimate Pro</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #1e293b; -webkit-tap-highlight-color: transparent; }
+    .glass-card { background: white; border: 1px solid #e2e8f0; border-radius: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
+    input, select { outline: none; background: transparent; border: none; }
+    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 8px; font-weight: 800; text-transform: uppercase; transition: all 0.2s; }
+    .nav-item.active { color: #4f46e5; transform: translateY(-2px); }
+    .nav-item.inactive { color: #94a3b8; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .todo-check:checked + span { text-decoration: line-through; opacity: 0.5; }
+    .login-gradient { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
+    .custom-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .custom-scroll::-webkit-scrollbar { display: none; }
+    @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-slide { animation: slideIn 0.25s ease-out; }
+  </style>
+</head>
+
+<body class="pb-28">
+  <div id="root"></div>
+
+  <script type="module">
+    import { h, render } from 'https://esm.sh/preact';
+    import { useEffect, useMemo, useRef, useState } from 'https://esm.sh/preact/hooks';
+    import htm from 'https://esm.sh/htm';
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      onAuthStateChanged,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDSw5TCS2Kw9rfA7bQq21Und8FGcXph2CY",
+      authDomain: "aniya-mcat.firebaseapp.com",
+      projectId: "aniya-mcat",
+      storageBucket: "aniya-mcat.firebasestorage.app",
+      messagingSenderId: "480186345968",
+      appId: "1:480186345968:web:d6175252b1df30f3555535",
+      measurementId: "G-5FRG3GMLJQ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const html = htm.bind(h);
+
+    const getLocalISODate = () => {
+      const now = new Date();
+      const tzOffset = now.getTimezoneOffset() * 60000;
+      return new Date(now.getTime() - tzOffset).toISOString().split('T')[0];
+    };
+
+    const SYLLABUS = {
+      "Gen Chem": ["Ch 1: Atomic Structure", "Ch 2: Periodic Table", "Ch 3: Bonding", "Ch 4: Stoichiometry", "Ch 5: Kinetics", "Ch 6: Equilibrium", "Ch 7: Thermochemistry", "Ch 8: Gas Phase", "Ch 9: Solutions", "Ch 10: Acids and Bases", "Ch 11: Redox", "Ch 12: Electrochemistry"],
+      "Orgo": ["Ch 1: Nomenclature", "Ch 2: Isomers", "Ch 3: Bonding", "Ch 4: Analyzing Reactions", "Ch 5: Alcohols", "Ch 6: Aldehydes I", "Ch 7: Aldehydes II", "Ch 8: Carboxylic Acids", "Ch 9: CA Derivatives", "Ch 10: N and P Compounds", "Ch 11: Spectroscopy", "Ch 12: Separations"],
+      "Physics": ["Ch 1: Kinematics", "Ch 2: Energy", "Ch 3: Thermo", "Ch 4: Fluids", "Ch 5: Magnetism", "Ch 6: Circuits", "Ch 7: Waves", "Ch 8: Optics", "Ch 9: Atomic", "Ch 10: Math", "Ch 11: Research", "Ch 12: Stats"],
+      "Biology": ["Ch 1: The Cell", "Ch 2: Reproduction", "Ch 3: Embryogenesis", "Ch 4: Nervous System", "Ch 5: Endocrine", "Ch 6: Respiratory", "Ch 7: Cardiovascular", "Ch 8: Immune", "Ch 9: Digestive", "Ch 10: Homeostasis", "Ch 11: Musculoskeletal", "Ch 12: Genetics"],
+      "Biochem": ["Ch 1: Amino Acids", "Ch 2: Enzymes", "Ch 3: Protein Analysis", "Ch 4: Carbohydrates", "Ch 5: Lipids", "Ch 6: DNA/Biotech", "Ch 7: RNA/Code", "Ch 8: Membranes", "Ch 9: Metabolism I", "Ch 10: Metabolism II", "Ch 11: Lipid/AA Metabolism", "Ch 12: Bioenergetics"],
+      "Psych Soc": ["Ch 1: Biological Bases", "Ch 2: Sensation", "Ch 3: Learning/Memory", "Ch 4: Cognition/Language", "Ch 5: Motivation/Emotion", "Ch 6: Identity/Personality", "Ch 7: Social Interaction", "Ch 8: Social Structure", "Ch 9: Demographics", "Ch 10: Social Stratification"]
+    };
+
+    const ACC_SOURCES = [
+      "UWorld",
+      "AAMC QPack",
+      "AAMC Section Bank",
+      "AAMC Independent Question Bank",
+      "Jack Westin",
+      "Bootcamp",
+      "Blueprint",
+      "Kaplan QBank",
+      "Princeton Review",
+      "Altius",
+      "Khan Academy",
+      "Other"
+    ];
+
+    const ACC_CATEGORIES = [
+      "C/P", "CARS", "B/B", "P/S",
+      "Bio", "Gen Chem", "Orgo", "Physics", "Biochem", "Psych", "Soc"
+    ];
+
+    const ACC_MODES = ["Passage", "Discrete"];
+
+    const DEFAULT_DATA = {
+      topics: {},
+
+      activeRotation: ["Biology", "Psych Soc", "Biochem"],
+      psResource: "300 Page Doc",
+
+      anki: [],
+      flScores: [],
+      accuracy: [],
+
+      dailyChecks: {},
+      dailyExtras: {},
+      dailyLog: {},
+
+      extraPick: ""
+    };
+
+    const App = () => {
+      const todayISO = getLocalISODate();
+
+      const [user, setUser] = useState(null);
+      const [activeTab, setActiveTab] = useState('home');
+      const [syllabusCat, setSyllabusCat] = useState('Gen Chem');
+
+      const [data, setData] = useState(DEFAULT_DATA);
+      const [hasLoaded, setHasLoaded] = useState(false);
+      const [isSyncing, setIsSyncing] = useState(false);
+      const [authError, setAuthError] = useState('');
+
+      const saveTimer = useRef(null);
+      const chartRef = useRef(null);
+      const chartInstance = useRef(null);
+
+      // ---------- AUTH ----------
+      const handleAuth = async (e, mode) => {
+        e.preventDefault();
+        setAuthError('');
+
+        const form = e.currentTarget?.tagName === 'FORM'
+          ? e.currentTarget
+          : e.currentTarget?.closest('form');
+
+        const email = form.elements.email.value.trim();
+        const password = form.elements.password.value;
+
+        try {
+          if (mode === 'login') await signInWithEmailAndPassword(auth, email, password);
+          else await createUserWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          setAuthError(err.code || err.message);
+        }
+      };
+
+      // ---------- LOAD USER DOC ----------
+      useEffect(() => {
+        const unsub = onAuthStateChanged(auth, async (u) => {
+          setHasLoaded(false);
+
+          if (!u) {
+            setUser(null);
+            setData(DEFAULT_DATA);
+            return;
+          }
+
+          setUser(u);
+
+          try {
+            const docRef = doc(db, "users", u.uid);
+            const snap = await getDoc(docRef);
+
+            if (snap.exists()) {
+              setData({ ...DEFAULT_DATA, ...snap.data() });
+            } else {
+              await setDoc(docRef, DEFAULT_DATA, { merge: true });
+              setData(DEFAULT_DATA);
+            }
+          } catch (err) {
+            console.error("Load error:", err);
+          } finally {
+            setHasLoaded(true);
+          }
+        });
+
+        return unsub;
+      }, []);
+
+      // ---------- SYNC (DEBOUNCED) ----------
+      useEffect(() => {
+        if (!user) return;
+        if (!hasLoaded) return;
+
+        setIsSyncing(true);
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+
+        saveTimer.current = setTimeout(async () => {
+          try {
+            const docRef = doc(db, "users", user.uid);
+            await setDoc(docRef, data); // overwrite doc so deletions actually persist
+          } catch (err) {
+            console.error("Sync error:", err);
+          } finally {
+            setIsSyncing(false);
+          }
+        }, 350);
+
+        return () => {
+          if (saveTimer.current) clearTimeout(saveTimer.current);
+        };
+      }, [data, user, hasLoaded]);
+
+      // ---------- LOG HELPERS ----------
+      const upsertLogItem = (date, item) => {
+        setData(prev => {
+          const prevItems = prev.dailyLog?.[date] || [];
+          const nextItems = prevItems.filter(x => !(x.type === item.type && x.key === item.key));
+          nextItems.unshift({ id: Date.now(), ...item });
+
+          return {
+            ...prev,
+            dailyLog: {
+              ...(prev.dailyLog || {}),
+              [date]: nextItems
+            }
+          };
+        });
+      };
+
+      const removeLogItem = (date, matcher) => {
+        setData(prev => {
+          const prevItems = prev.dailyLog?.[date] || [];
+          const nextItems = prevItems.filter(x => !matcher(x));
+          return {
+            ...prev,
+            dailyLog: {
+              ...(prev.dailyLog || {}),
+              [date]: nextItems
+            }
+          };
+        });
+      };
+
+      // ---------- CHAPTER HELPERS ----------
+      const getNextChapter = (cat) => {
+        const chapters = SYLLABUS[cat] || [];
+        const next = chapters.find(ch => !data.topics?.[`${cat}-${ch}`]);
+        return next || "Finished! 🎉";
+      };
+
+      const toggleTopicInRotation = (t) => {
+        let newRot = [...(data.activeRotation || [])];
+        if (newRot.includes(t)) newRot = newRot.filter(x => x !== t);
+        else newRot = [...newRot, t].slice(-3);
+        setData({ ...data, activeRotation: newRot });
+      };
+
+      const handleTopicClick = (cat, ch) => {
+        const key = `${cat}-${ch}`;
+        const exists = !!data.topics?.[key];
+
+        const nextTopics = { ...(data.topics || {}) };
+        if (exists) delete nextTopics[key];
+        else nextTopics[key] = { date: todayISO, resource: cat === 'Psych Soc' ? data.psResource : 'Standard' };
+
+        setData({ ...data, topics: nextTopics });
+      };
+
+      // ---------- TASK CHECK (CARS/PRACTICE) ----------
+      const setTaskCheck = ({ key, label, checked }) => {
+        const nextChecks = { ...(data.dailyChecks || {}) };
+        if (checked) nextChecks[key] = true;
+        else delete nextChecks[key];
+
+        setData({ ...data, dailyChecks: nextChecks });
+
+        if (checked) upsertLogItem(todayISO, { type: 'task', key, label });
+        else removeLogItem(todayISO, x => x.type === 'task' && x.key === key);
+      };
+
+      // ---------- ANKI AUTO-LOG ----------
+      // Keep ONE daily log item per date: type 'anki', key 'anki'
+      const syncAnkiLogForDate = (date, ankiArr) => {
+        const total = ankiArr
+          .filter(x => x.date === date)
+          .reduce((sum, x) => sum + Number(x.count || 0), 0);
+
+        if (total > 0) {
+          upsertLogItem(date, { type: 'anki', key: 'anki', label: `Anki: ${total} cards` });
+        } else {
+          removeLogItem(date, x => x.type === 'anki' && x.key === 'anki');
+        }
+      };
+
+      // ---------- CHART ----------
+      const sortedScores = useMemo(() => {
+        return [...(data.flScores || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+      }, [data.flScores]);
+
+      const renderChart = () => {
+        if (!chartRef.current || activeTab !== 'scores') return;
+        if (chartInstance.current) chartInstance.current.destroy();
+        if (!sortedScores.length) return;
+
+        chartInstance.current = new Chart(chartRef.current, {
+          type: 'line',
+          data: {
+            labels: sortedScores.map(s => (s.date || '').slice(5)),
+            datasets: [
+              { label: 'C/P', data: sortedScores.map(s => s.cp), borderColor: '#ef4444', tension: 0.3 },
+              { label: 'CARS', data: sortedScores.map(s => s.cars), borderColor: '#f59e0b', tension: 0.3 },
+              { label: 'B/B', data: sortedScores.map(s => s.bb), borderColor: '#10b981', tension: 0.3 },
+              { label: 'P/S', data: sortedScores.map(s => s.ps), borderColor: '#8b5cf6', tension: 0.3 }
+            ]
+          },
+          options: { maintainAspectRatio: false, scales: { y: { min: 118, max: 132 } } }
+        });
+      };
+
+      useEffect(() => { renderChart(); }, [activeTab, sortedScores]);
+
+      // ---------- DELETE HANDLERS ----------
+      const deleteAnki = (id) => {
+        const row = (data.anki || []).find(x => x.id === id);
+        const nextAnki = (data.anki || []).filter(x => x.id !== id);
+        setData({ ...data, anki: nextAnki });
+        if (row?.date) syncAnkiLogForDate(row.date, nextAnki);
+      };
+
+      const deleteFL = (id) => setData({ ...data, flScores: (data.flScores || []).filter(x => x.id !== id) });
+
+      const deleteAcc = (id) => setData({ ...data, accuracy: (data.accuracy || []).filter(x => x.id !== id) });
+
+      // ---------- LOGIN SCREEN ----------
+      if (!user) return html`
+        <div class="min-h-screen login-gradient flex items-center justify-center p-6">
+          <div class="glass-card w-full max-w-sm p-8 space-y-6">
+            <h1 class="text-3xl font-black text-center text-indigo-600 tracking-tighter italic">USER PORTAL</h1>
+
+            ${authError && html`
+              <p class="text-red-500 text-[10px] font-bold text-center bg-red-50 p-2 rounded-lg">
+                ${String(authError).replace('Firebase:', '').trim()}
+              </p>
+            `}
+
+            <form onSubmit=${(e)=>handleAuth(e, 'login')} class="space-y-4">
+              <input name="email" type="email" placeholder="Email" class="w-full p-4 bg-slate-50 rounded-2xl border" required />
+              <input name="password" type="password" placeholder="Password" class="w-full p-4 bg-slate-50 rounded-2xl border" required />
+
+              <div class="grid grid-cols-2 gap-3">
+                <button type="submit" class="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Sign In</button>
+                <button type="button" onClick=${(e)=>handleAuth(e, 'signup')} class="bg-white border-2 border-indigo-600 text-indigo-600 p-4 rounded-2xl font-black uppercase text-[10px]">Sign Up</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      const todaysExtras = data.dailyExtras?.[todayISO] || [];
+
+      // ---------- APP UI ----------
+      return html`
+        <div class="min-h-screen">
+          <header class="p-6 bg-white border-b flex justify-between items-center sticky top-0 z-40">
+            <div>
+              <h1 class="text-xl font-black italic text-indigo-600">MCAT TRACKER</h1>
+              <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                ${hasLoaded ? (isSyncing ? '☁️ Syncing...' : '✅ Secure') : '⏳ Loading...'}
+              </p>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <a href="https://jackwestin.com/daily/mcat-practice-passages/cars-practice-passages/" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">JW CARS</a>
+
+              <a href="https://www.mcatofficialprep.org/" target="_blank"
+                class="text-[9px] font-black bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg uppercase">AAMC</a>
+
+              <a href="https://www.uworld.com/app/index.html#/login/" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">UWORLD</a>
+                
+              <a href="https://bootcamp.com/mcat" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">BOOTCAMP</a>
+              
+              <a href="https://www.khanacademy.org/test-prep/mcat" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">KA</a>            
+
+              <button onClick=${()=>signOut(auth)} class="text-[9px] font-black text-red-400 uppercase">Logout</button>
+            </div>
+          </header>
+
+          <main class="p-6 space-y-6 animate-slide">
+            <section class="glass-card p-6 bg-slate-900 text-white shadow-2xl relative overflow-hidden">
+              <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500 blur-[80px] opacity-20"></div>
+
+              <div class="flex justify-between items-center mb-4 relative z-10">
+                <h2 class="text-xs font-black uppercase text-indigo-400 tracking-widest">
+                  Today's Protocol · ${todayISO}
+                </h2>
+
+                <div class="flex space-x-1">
+                  ${Object.keys(SYLLABUS).map(t => html`
+                    <button
+                      onClick=${() => toggleTopicInRotation(t)}
+                      class="w-7 h-7 rounded-lg text-[9px] font-black flex items-center justify-center border transition-all
+                        ${(data.activeRotation || []).includes(t)
+                          ? 'bg-indigo-600 border-indigo-500 scale-110 shadow-lg'
+                          : 'border-slate-700 text-slate-500'}">
+                      ${t === 'Psych Soc' ? 'PS' : t[0]}
+                    </button>
+                  `)}
+                </div>
+              </div>
+
+              <div class="space-y-3 relative z-10">
+                ${(data.activeRotation || []).map(topic => {
+                  const checkKey = `${todayISO}-content-${topic}`;
+                  const frozenKey = `${todayISO}-content-${topic}-frozen`;
+
+                  const checked = !!data.dailyChecks?.[checkKey];
+                  const frozen = data.dailyChecks?.[frozenKey] || '';
+                  const chapterLabel = frozen || getNextChapter(topic);
+
+                  const homeKey = `${topic}-${chapterLabel}`;
+
+                  return html`
+  <div class="flex items-start gap-3">
+    <input
+      type="checkbox"
+      checked=${checked}
+      onChange=${() => {
+        const nextChecked = !checked;
+
+        const nextChecks = { ...(data.dailyChecks || {}) };
+        const nextTopics = { ...(data.topics || {}) };
+
+        // Decide which chapter we are locking in for today:
+        // If user picked from dropdown, use frozen; else use next unfinished.
+        const chosenChapter = (nextChecks[frozenKey] || frozen || getNextChapter(topic));
+
+        // Guard: don’t log "Finished! 🎉" as a chapter
+        if (chosenChapter === "Finished! 🎉") return;
+
+        const homeKey = `${topic}-${chosenChapter}`;
+
+        if (nextChecked) {
+          // ✅ Mark checked + freeze selection for today
+          nextChecks[checkKey] = true;
+          nextChecks[frozenKey] = chosenChapter;
+
+          // ✅ Sync Home
+          nextTopics[homeKey] = nextTopics[homeKey] || {
+            date: todayISO,
+            resource: topic === 'Psych Soc' ? data.psResource : 'Standard'
+          };
+
+          setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+
+          // ✅ Log
+          upsertLogItem(todayISO, {
+            type: 'content',
+            key: homeKey,
+            label: `Content Review: ${topic} — ${chosenChapter}`
+          });
+        } else {
+          // ✅ Uncheck: remove checked state + remove Home + remove Log
+          delete nextChecks[checkKey];
+
+          // NOTE: we KEEP frozenKey so your choice stays remembered for today
+          // If you want it to reset when unchecked, also do: delete nextChecks[frozenKey];
+
+          delete nextTopics[homeKey];
+
+          setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+
+          removeLogItem(todayISO, x => x.type === 'content' && x.key === homeKey);
+        }
+      }}
+      class="todo-check w-5 h-5 rounded-full accent-indigo-500 border-none mt-1"
+    />
+
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-sm font-bold text-slate-100">
+          Content Review:
+          <span class="text-indigo-300"> ${topic}</span>
+        </span>
+
+        ${checked && html`
+          <span class="text-[9px] font-black uppercase text-slate-400 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700">
+            locked
+          </span>
+        `}
+      </div>
+
+      <select
+        disabled=${checked}
+        class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-indigo-200
+               disabled:opacity-60 disabled:cursor-not-allowed"
+        value=${(frozen || '').trim()}
+        onChange=${e => {
+          const v = e.target.value;
+
+          const nextChecks = { ...(data.dailyChecks || {}) };
+
+          if (!v) {
+            // "Auto" mode — remove frozen
+            delete nextChecks[frozenKey];
+          } else {
+            // Freeze selected chapter for today (even before completion)
+            nextChecks[frozenKey] = v;
+          }
+
+          setData({ ...data, dailyChecks: nextChecks });
+        }}
+      >
+        <option value="">Auto (Next Unfinished)</option>
+
+        ${(SYLLABUS[topic] || []).map(ch => {
+          const doneAlready = !!data.topics?.[`${topic}-${ch}`];
+          return html`
+            <option value=${ch} disabled=${doneAlready}>
+              ${ch}${doneAlready ? ' ✓' : ''}
+            </option>
+          `;
+        })}
+      </select>
+
+      <div class="mt-2 text-[10px] font-black text-slate-400">
+        Selected:
+        <span class="text-slate-100">
+          ${(frozen || getNextChapter(topic))}
+        </span>
+      </div>
+    </div>
+  </div>
+`;
+
+                })}
+
+                <label class="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked=${!!data.dailyChecks?.[`${todayISO}-cars`]}
+                    onChange=${() => {
+                      const k = `${todayISO}-cars`;
+                      setTaskCheck({ key: k, label: 'Daily CARS Passage', checked: !data.dailyChecks?.[k] });
+                    }}
+                    class="todo-check w-5 h-5 rounded-full accent-green-500" />
+                  <span class="text-sm font-bold text-slate-100">Daily CARS Passage</span>
+                </label>
+
+                <label class="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked=${!!data.dailyChecks?.[`${todayISO}-practice`]}
+                    onChange=${() => {
+                      const k = `${todayISO}-practice`;
+                      setTaskCheck({ key: k, label: 'Practice Questions', checked: !data.dailyChecks?.[k] });
+                    }}
+                    class="todo-check w-5 h-5 rounded-full accent-pink-500" />
+                  <span class="text-sm font-bold text-slate-100">Practice Questions</span>
+                </label>
+
+                <div class="mt-3 p-3 rounded-2xl border border-slate-700 bg-slate-800/60">
+                  <p class="text-[10px] font-black uppercase text-slate-300 tracking-widest mb-2">
+                    Extra Chapters (optional)
+                  </p>
+
+                  <div class="flex gap-2">
+                    <select
+                      class="flex-1 bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-slate-100"
+                      value=${data.extraPick || ''}
+                      onChange=${e => setData({ ...data, extraPick: e.target.value })}
+                    >
+                      <option value="">Select a chapter…</option>
+                      ${Object.keys(SYLLABUS).map(cat => html`
+                        <optgroup label=${cat}>
+                          ${SYLLABUS[cat].map(ch => html`
+                            <option value=${`${cat}|||${ch}`}>${cat} — ${ch}</option>
+                          `)}
+                        </optgroup>
+                      `)}
+                    </select>
+
+                    <button
+                      class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase"
+                      onClick=${() => {
+                        if (!data.extraPick) return;
+                        const [cat, ch] = data.extraPick.split('|||');
+
+                        const id = Date.now();
+                        const nextDailyExtras = { ...(data.dailyExtras || {}) };
+                        const arr = nextDailyExtras[todayISO] ? [...nextDailyExtras[todayISO]] : [];
+                        arr.unshift({ id, cat, ch });
+                        nextDailyExtras[todayISO] = arr;
+
+                        setData({ ...data, dailyExtras: nextDailyExtras, extraPick: '' });
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  ${(todaysExtras.length > 0) && html`
+                    <div class="mt-3 space-y-2">
+                      ${todaysExtras.map(ex => {
+                        const checkKey = `${todayISO}-extra-${ex.id}`;
+                        const checked = !!data.dailyChecks?.[checkKey];
+                        const homeKey = `${ex.cat}-${ex.ch}`;
+
+                        return html`
+                          <div class="flex items-center justify-between gap-2">
+                            <label class="flex items-center space-x-3 cursor-pointer flex-1">
+                              <input
+                                type="checkbox"
+                                checked=${checked}
+                                onChange=${() => {
+                                  const nextChecked = !checked;
+
+                                  const nextChecks = { ...(data.dailyChecks || {}) };
+                                  const nextTopics = { ...(data.topics || {}) };
+
+                                  if (nextChecked) {
+                                    nextChecks[checkKey] = true;
+                                    nextTopics[homeKey] = nextTopics[homeKey] || {
+                                      date: todayISO,
+                                      resource: ex.cat === 'Psych Soc' ? data.psResource : 'Standard'
+                                    };
+                                    setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+
+                                    upsertLogItem(todayISO, {
+                                      type: 'extra',
+                                      key: homeKey,
+                                      label: `Extra Chapter: ${ex.cat} — ${ex.ch}`
+                                    });
+                                  } else {
+                                    delete nextChecks[checkKey];
+                                    delete nextTopics[homeKey];
+                                    setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+
+                                    removeLogItem(todayISO, x => x.type === 'extra' && x.key === homeKey);
+                                  }
+                                }}
+                                class="todo-check w-5 h-5 rounded-full accent-indigo-500 border-none" />
+
+                              <span class="text-sm font-bold text-slate-100">
+                                Extra Chapter: <span class="text-indigo-300">${ex.cat} — ${ex.ch}</span>
+                              </span>
+                            </label>
+
+                            <button
+                              class="text-[10px] font-black uppercase text-red-300 bg-red-900/20 px-3 py-2 rounded-xl border border-red-900/30"
+                              onClick=${() => {
+                                const nextDailyExtras = { ...(data.dailyExtras || {}) };
+                                nextDailyExtras[todayISO] = (nextDailyExtras[todayISO] || []).filter(x => x.id !== ex.id);
+
+                                const nextChecks = { ...(data.dailyChecks || {}) };
+                                delete nextChecks[checkKey];
+
+                                const nextTopics = { ...(data.topics || {}) };
+                                delete nextTopics[homeKey];
+
+                                setData({ ...data, dailyExtras: nextDailyExtras, dailyChecks: nextChecks, topics: nextTopics });
+                                removeLogItem(todayISO, x => x.type === 'extra' && x.key === homeKey);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        `;
+                      })}
+                    </div>
+                  `}
+                </div>
+
+              </div>
+            </section>
+
+            ${activeTab === 'home' && html`
+              <div class="space-y-4">
+                <div class="flex space-x-2 custom-scroll no-scrollbar p-1">
+                  ${Object.keys(SYLLABUS).map(cat => html`
+                    <button
+                      onClick=${()=>setSyllabusCat(cat)}
+                      class="px-5 py-2.5 rounded-full text-[10px] font-black uppercase whitespace-nowrap shadow-sm transition-all
+                        ${syllabusCat===cat ? 'bg-indigo-600 text-white' : 'bg-white border text-slate-400'}">
+                      ${cat}
+                    </button>
+                  `)}
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 animate-slide">
+                  ${SYLLABUS[syllabusCat].map(t => html`
+                    <div
+                      onClick=${() => handleTopicClick(syllabusCat, t)}
+                      class="glass-card p-5 flex justify-between items-center transition-all cursor-pointer hover:border-indigo-300
+                        ${data.topics?.[`${syllabusCat}-${t}`] ? 'border-green-400 bg-green-50/50 shadow-inner' : ''}">
+                      <div class="flex flex-col">
+                        <span class="text-xs font-black ${data.topics?.[`${syllabusCat}-${t}`] ? 'text-green-700' : 'text-slate-700'}">
+                          ${t}
+                        </span>
+                      </div>
+                      <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
+                        ${data.topics?.[`${syllabusCat}-${t}`] ? 'bg-green-500 border-green-500' : 'border-slate-200'}">
+                        ${data.topics?.[`${syllabusCat}-${t}`] && html`<span class="text-white text-[10px]">✓</span>`}
+                      </div>
+                    </div>
+                  `)}
+                </div>
+              </div>
+            `}
+
+            ${activeTab === 'anki' && html`
+              <div class="space-y-4 animate-slide">
+                <div class="flex items-end justify-between">
+                  <h2 class="text-xl font-black">Anki Logger</h2>
+                  <p class="text-[10px] font-black text-slate-400 uppercase">auto-syncs to Daily Log</p>
+                </div>
+
+                <button
+                  onClick=${() => {
+                    const nextAnki = [{ id: Date.now(), date: todayISO, count: 0 }, ...(data.anki || [])];
+                    setData({ ...data, anki: nextAnki });
+                    syncAnkiLogForDate(todayISO, nextAnki);
+                  }}
+                  class="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">
+                  + Log Cards
+                </button>
+
+                ${(data.anki || []).length === 0 && html`
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
+                    No Anki entries yet.
+                  </div>
+                `}
+
+                ${(data.anki || []).map(a => html`
+                  <div class="glass-card p-5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="date"
+                        value=${a.date || todayISO}
+                        class="text-xs font-black text-indigo-600"
+                        onInput=${e => {
+                          const newDate = e.target.value;
+                          const oldDate = a.date || todayISO;
+                          const nextAnki = (data.anki || []).map(x => x.id === a.id ? { ...x, date: newDate } : x);
+                          setData({ ...data, anki: nextAnki });
+                          syncAnkiLogForDate(oldDate, nextAnki);
+                          syncAnkiLogForDate(newDate, nextAnki);
+                        }}
+                      />
+                      <input
+                        type="number"
+                        class="w-24 text-right font-black text-xl"
+                        value=${Number(a.count || 0)}
+                        onInput=${e => {
+                          const nextCount = Number(e.target.value || 0);
+                          const nextAnki = (data.anki || []).map(x => x.id === a.id ? { ...x, count: nextCount } : x);
+                          setData({ ...data, anki: nextAnki });
+                          syncAnkiLogForDate(a.date || todayISO, nextAnki);
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      onClick=${() => deleteAnki(a.id)}
+                      class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
+                      Delete
+                    </button>
+                  </div>
+                `)}
+              </div>
+            `}
+
+            ${activeTab === 'scores' && html`
+              <div class="space-y-6 animate-slide">
+                <div class="flex items-end justify-between">
+                  <h2 class="text-xl font-black">Full Length Scores</h2>
+                  <p class="text-[10px] font-black text-slate-400 uppercase">tap delete to remove</p>
+                </div>
+
+                <div class="glass-card p-4 h-64 shadow-inner">
+                  <canvas ref=${chartRef}></canvas>
+                </div>
+
+                <button
+                  onClick=${() => setData({
+                    ...data,
+                    flScores: [{
+                      id: Date.now(),
+                      date: todayISO,
+                      source: 'AAMC FL',
+                      cp: 125, cars: 125, bb: 125, ps: 125
+                    }, ...(data.flScores || [])]
+                  })}
+                  class="w-full bg-slate-900 text-white p-5 rounded-2xl font-black uppercase text-xs">
+                  + New Full Length
+                </button>
+
+                ${(data.flScores || []).map(s => html`
+                  <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between gap-3">
+                      <input
+                        type="date"
+                        value=${s.date || todayISO}
+                        class="text-xs font-black text-indigo-600"
+                        onInput=${e => setData({
+                          ...data,
+                          flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, date: e.target.value } : x)
+                        })}
+                      />
+                      <button
+                        onClick=${() => deleteFL(s.id)}
+                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
+                        Delete
+                      </button>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-3">
+                      ${['cp','cars','bb','ps'].map(f => html`
+                        <div class="bg-slate-50 p-2 rounded-xl text-center">
+                          <p class="text-[8px] font-black text-slate-400 uppercase">${f}</p>
+                          <input
+                            type="number"
+                            class="w-full text-center font-black"
+                            value=${Number(s[f] || 0)}
+                            onInput=${e => setData({
+                              ...data,
+                              flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, [f]: Number(e.target.value) } : x)
+                            })}
+                          />
+                        </div>
+                      `)}
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+
+            ${activeTab === 'acc' && html`
+              <div class="space-y-4 animate-slide">
+                <div class="flex items-end justify-between">
+                  <h2 class="text-xl font-black">Accuracy Tracker</h2>
+                  <p class="text-[10px] font-black text-slate-400 uppercase">sources + category + mode</p>
+                </div>
+
+                <button
+                  onClick=${() => setData({
+                    ...data,
+                    accuracy: [{
+                      id: Date.now(),
+                      date: todayISO,
+                      source: "UWorld",
+                      category: "B/B",
+                      mode: "Passage",
+                      correct: 0,
+                      total: 0
+                    }, ...(data.accuracy || [])]
+                  })}
+                  class="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">
+                  + Log Practice Set
+                </button>
+
+                ${(data.accuracy || []).length === 0 && html`
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
+                    No accuracy entries yet.
+                  </div>
+                `}
+
+                ${(data.accuracy || []).map(r => html`
+                  <div class="glass-card p-5 space-y-3">
+                    <div class="flex items-center justify-between">
+                      <input
+                        type="date"
+                        value=${r.date || todayISO}
+                        class="text-xs font-black text-indigo-600"
+                        onInput=${e => setData({
+                          ...data,
+                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, date: e.target.value } : x)
+                        })}
+                      />
+                      <button
+                        onClick=${() => deleteAcc(r.id)}
+                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
+                        Delete
+                      </button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                      <select
+                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                        value=${r.source || "UWorld"}
+                        onChange=${e => setData({
+                          ...data,
+                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, source: e.target.value } : x)
+                        })}
+                      >
+                        ${ACC_SOURCES.map(opt => html`<option value=${opt}>${opt}</option>`)}
+                      </select>
+
+                      <select
+                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                        value=${r.category || "B/B"}
+                        onChange=${e => setData({
+                          ...data,
+                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, category: e.target.value } : x)
+                        })}
+                      >
+                        ${ACC_CATEGORIES.map(opt => html`<option value=${opt}>${opt}</option>`)}
+                      </select>
+
+                      <select
+                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                        value=${r.mode || "Passage"}
+                        onChange=${e => setData({
+                          ...data,
+                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, mode: e.target.value } : x)
+                        })}
+                      >
+                        ${ACC_MODES.map(opt => html`<option value=${opt}>${opt}</option>`)}
+                      </select>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <input
+                          type="number"
+                          class="w-16 text-center font-black text-lg text-indigo-600 bg-slate-50 border border-slate-200 rounded-xl py-2"
+                          value=${Number(r.correct || 0)}
+                          onInput=${e => setData({
+                            ...data,
+                            accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, correct: Number(e.target.value || 0) } : x)
+                          })}
+                        />
+                        <span class="text-slate-400 font-black">/</span>
+                        <input
+                          type="number"
+                          class="w-16 text-center font-black text-lg bg-slate-50 border border-slate-200 rounded-xl py-2"
+                          value=${Number(r.total || 0)}
+                          onInput=${e => setData({
+                            ...data,
+                            accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, total: Number(e.target.value || 0) } : x)
+                          })}
+                        />
+                      </div>
+
+                      <div class="text-[10px] font-black uppercase text-slate-400">
+                        ${r.total > 0 ? `${Math.round((r.correct / r.total) * 100)}%` : '--%'}
+                      </div>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
+
+            ${activeTab === 'log' && html`
+              <div class="space-y-4 animate-slide">
+                <div class="flex items-end justify-between">
+                  <h2 class="text-xl font-black">Daily Log</h2>
+                  <p class="text-[10px] font-black text-slate-400 uppercase">shows all days</p>
+                </div>
+
+                ${Object.keys(data.dailyLog || {}).length === 0 && html`
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
+                    No log entries yet.
+                  </div>
+                `}
+
+                ${Object.entries(data.dailyLog || {})
+                  .sort((a,b) => new Date(b[0]) - new Date(a[0]))
+                  .map(([date, items]) => html`
+                    <div class="glass-card p-5 space-y-3">
+                      <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-black text-indigo-600">${date}</h3>
+                        <button
+                          onClick=${() => {
+                            const next = { ...(data.dailyLog || {}) };
+                            delete next[date];
+                            setData({ ...data, dailyLog: next });
+                          }}
+                          class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
+                          Delete Day
+                        </button>
+                      </div>
+
+                      ${(items || []).length === 0 && html`
+                        <div class="text-[12px] font-bold text-slate-400">No entries.</div>
+                      `}
+
+                      ${(items || []).map(item => html`
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="text-[12px] font-bold text-slate-700">${item.label}</div>
+                          <button
+                            onClick=${() => removeLogItem(date, x => x.type === item.type && x.key === item.key)}
+                            class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
+                            Delete
+                          </button>
+                        </div>
+                      `)}
+                    </div>
+                  `)}
+              </div>
+            `}
+
+            ${activeTab === 'help' && html`
+              <div class="space-y-4 animate-slide">
+                <div class="glass-card p-6 space-y-3">
+                  <h2 class="text-2xl font-black tracking-tighter">Help / How This Works</h2>
+                  <p class="text-[12px] font-bold text-slate-500">
+                    Checking items in <span class="font-black">Today’s Protocol</span> writes to the Daily Log and syncs to Home chapters.
+                    Home is for marking anything anytime (historical), but it does not automatically log.
+                  </p>
+                </div>
+
+                <div class="glass-card p-6 space-y-3">
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Content Review</h3>
+                  <ul class="text-[12px] font-bold text-slate-600 space-y-2">
+                    <li><span class="text-slate-900 font-black">Pick subjects:</span> tap the small subject buttons (top-right of Today’s Protocol).</li>
+                    <li><span class="text-slate-900 font-black">Check:</span> logs “Content Review: …” + checks that chapter on Home.</li>
+                    <li><span class="text-slate-900 font-black">Uncheck:</span> removes from Log + unchecks that chapter on Home.</li>
+                  </ul>
+                </div>
+
+                <div class="glass-card p-6 space-y-3">
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Extra Chapters</h3>
+                  <ul class="text-[12px] font-bold text-slate-600 space-y-2">
+                    <li><span class="text-slate-900 font-black">Add multiple:</span> pick a chapter → tap <span class="font-black">+ Add</span> as many times as you want.</li>
+                    <li><span class="text-slate-900 font-black">Each extra has its own checkbox:</span> check → logs “Extra Chapter: …” + marks Home.</li>
+                    <li><span class="text-slate-900 font-black">Delete button:</span> removes the extra row + log entry + Home mark.</li>
+                  </ul>
+                </div>
+
+                <div class="glass-card p-6 space-y-3">
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Anki Logger</h3>
+                  <ul class="text-[12px] font-bold text-slate-600 space-y-2">
+                    <li><span class="text-slate-900 font-black">Auto-log:</span> Daily Log shows “Anki: ___ cards”.</li>
+                    <li><span class="text-slate-900 font-black">Auto-update:</span> editing counts updates the log instantly.</li>
+                  </ul>
+                </div>
+
+                <div class="glass-card p-6 space-y-3">
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Accuracy</h3>
+                  <ul class="text-[12px] font-bold text-slate-600 space-y-2">
+                    <li><span class="text-slate-900 font-black">Source:</span> UWorld / AAMC / JW / Bootcamp / etc.</li>
+                    <li><span class="text-slate-900 font-black">Category:</span> use C/P, B/B, P/S, CARS OR Bio/Orgo/etc.</li>
+                    <li><span class="text-slate-900 font-black">Mode:</span> Passage or Discrete.</li>
+                  </ul>
+                </div>
+              </div>
+            `}
+          </main>
+
+          <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t h-24 flex items-center px-4 z-50">
+            ${[
+              { key: 'home', label: 'home' },
+              { key: 'anki', label: 'anki' },
+              { key: 'scores', label: 'scores' },
+              { key: 'acc', label: 'acc' },
+              { key: 'log', label: 'log' },
+              { key: 'help', label: 'help' }
+            ].map(t => html`
+              <button onClick=${() => setActiveTab(t.key)} class="nav-item ${activeTab===t.key?'active':'inactive'}">
+                <div class="w-6 h-6 mb-1 rounded-lg flex items-center justify-center ${activeTab===t.key?'bg-indigo-600 text-white shadow-lg':'bg-slate-100'}">
+                  <span class="text-[10px] font-black">
+                    ${t.key === 'help' ? '?' : t.key[0].toUpperCase()}
+                  </span>
+                </div>
+                <span class="font-black text-[7px] tracking-tighter">${t.label}</span>
+              </button>
+            `)}
+          </nav>
+        </div>
+      `;
+    };
+
+    render(html`<${App} />`, document.getElementById('root'));
+  </script>
+</body>
+</html>
+
+
+
