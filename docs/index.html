@@ -77,18 +77,9 @@
     };
 
     const ACC_SOURCES = [
-      "UWorld",
-      "AAMC QPack",
-      "AAMC Section Bank",
-      "AAMC Independent Question Bank",
-      "Jack Westin",
-      "Bootcamp",
-      "Blueprint",
-      "Kaplan QBank",
-      "Princeton Review",
-      "Altius",
-      "Khan Academy",
-      "Other"
+      "UWorld", "AAMC QPack", "AAMC Section Bank", "AAMC Independent Question Bank",
+      "Jack Westin", "Bootcamp", "Blueprint", "Kaplan QBank", "Princeton Review",
+      "Altius", "Khan Academy", "Other"
     ];
 
     const ACC_CATEGORIES = [
@@ -100,21 +91,16 @@
 
     const DEFAULT_DATA = {
       topics: {},
-        chapterAliases: {}, // key: "Cat|||Chapter" -> "My Display Name"
-      // Per-user chapter customization (display only)
-      chapterAliases: {},      // key: "Cat|||Chapter" -> "My Display Name"
-      hiddenChapters: {},      // key: "Cat|||Chapter" -> true
+      chapterAliases: {},
+      hiddenChapters: {},
       activeRotation: ["Biology", "Psych Soc", "Biochem"],
       psResource: "300 Page Doc",
-
       cards: [],
       flScores: [],
       accuracy: [],
-
       dailyChecks: {},
       dailyExtras: {},
       dailyLog: {},
-
       extraPick: ""
     };
 
@@ -124,6 +110,8 @@
       const [user, setUser] = useState(null);
       const [activeTab, setActiveTab] = useState('home');
       const [syllabusCat, setSyllabusCat] = useState('Gen Chem');
+      // controls whether the Hidden Chapters panel is expanded
+      const [showHidden, setShowHidden] = useState(false);
 
       const [data, setData] = useState(DEFAULT_DATA);
       const [hasLoaded, setHasLoaded] = useState(false);
@@ -138,14 +126,11 @@
       const handleAuth = async (e, mode) => {
         e.preventDefault();
         setAuthError('');
-
         const form = e.currentTarget?.tagName === 'FORM'
           ? e.currentTarget
           : e.currentTarget?.closest('form');
-
         const email = form.elements.email.value.trim();
         const password = form.elements.password.value;
-
         try {
           if (mode === 'login') await signInWithEmailAndPassword(auth, email, password);
           else await createUserWithEmailAndPassword(auth, email, password);
@@ -158,57 +143,32 @@
       useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
           setHasLoaded(false);
-
-          if (!u) {
-            setUser(null);
-            setData(DEFAULT_DATA);
-            return;
-          }
-
+          if (!u) { setUser(null); setData(DEFAULT_DATA); return; }
           setUser(u);
-
           try {
             const docRef = doc(db, "users", u.uid);
             const snap = await getDoc(docRef);
-
-            if (snap.exists()) {
-              setData({ ...DEFAULT_DATA, ...snap.data() });
-            } else {
-              await setDoc(docRef, DEFAULT_DATA, { merge: true });
-              setData(DEFAULT_DATA);
-            }
-          } catch (err) {
-            console.error("Load error:", err);
-          } finally {
-            setHasLoaded(true);
-          }
+            if (snap.exists()) setData({ ...DEFAULT_DATA, ...snap.data() });
+            else { await setDoc(docRef, DEFAULT_DATA, { merge: true }); setData(DEFAULT_DATA); }
+          } catch (err) { console.error("Load error:", err); }
+          finally { setHasLoaded(true); }
         });
-
         return unsub;
       }, []);
 
       // ---------- SYNC (DEBOUNCED) ----------
       useEffect(() => {
-        if (!user) return;
-        if (!hasLoaded) return;
-
+        if (!user || !hasLoaded) return;
         setIsSyncing(true);
         if (saveTimer.current) clearTimeout(saveTimer.current);
-
         saveTimer.current = setTimeout(async () => {
           try {
             const docRef = doc(db, "users", user.uid);
-            await setDoc(docRef, data); // overwrite doc so deletions actually persist
-          } catch (err) {
-            console.error("Sync error:", err);
-          } finally {
-            setIsSyncing(false);
-          }
+            await setDoc(docRef, data);
+          } catch (err) { console.error("Sync error:", err); }
+          finally { setIsSyncing(false); }
         }, 350);
-
-        return () => {
-          if (saveTimer.current) clearTimeout(saveTimer.current);
-        };
+        return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
       }, [data, user, hasLoaded]);
 
       // ---------- LOG HELPERS ----------
@@ -217,14 +177,7 @@
           const prevItems = prev.dailyLog?.[date] || [];
           const nextItems = prevItems.filter(x => !(x.type === item.type && x.key === item.key));
           nextItems.unshift({ id: Date.now(), ...item });
-
-          return {
-            ...prev,
-            dailyLog: {
-              ...(prev.dailyLog || {}),
-              [date]: nextItems
-            }
-          };
+          return { ...prev, dailyLog: { ...(prev.dailyLog || {}), [date]: nextItems } };
         });
       };
 
@@ -232,18 +185,12 @@
         setData(prev => {
           const prevItems = prev.dailyLog?.[date] || [];
           const nextItems = prevItems.filter(x => !matcher(x));
-          return {
-            ...prev,
-            dailyLog: {
-              ...(prev.dailyLog || {}),
-              [date]: nextItems
-            }
-          };
+          return { ...prev, dailyLog: { ...(prev.dailyLog || {}), [date]: nextItems } };
         });
       };
 
       // ---------- CHAPTER HELPERS ----------
-            const chapterKey = (cat, ch) => `${cat}|||${ch}`;
+      const chapterKey = (cat, ch) => `${cat}|||${ch}`;
 
       const getChapterLabel = (cat, ch) => {
         const k = chapterKey(cat, ch);
@@ -251,10 +198,7 @@
         return (alias && String(alias).trim()) ? alias : ch;
       };
 
-      const isHiddenChapter = (cat, ch) => {
-        const k = chapterKey(cat, ch);
-        return !!data.hiddenChapters?.[k];
-      };
+      const isHiddenChapter = (cat, ch) => !!data.hiddenChapters?.[chapterKey(cat, ch)];
 
       const toggleHideChapter = (cat, ch) => {
         const k = chapterKey(cat, ch);
@@ -268,21 +212,30 @@
         const k = chapterKey(cat, ch);
         const current = data.chapterAliases?.[k] || "";
         const next = prompt(`Rename display name for:\n${cat} — ${ch}\n\n(Leave blank to reset)`, current);
-        if (next === null) return; // user canceled
-
+        if (next === null) return;
         const nextAliases = { ...(data.chapterAliases || {}) };
         const trimmed = String(next).trim();
-
         if (!trimmed) delete nextAliases[k];
         else nextAliases[k] = trimmed;
-
         setData({ ...data, chapterAliases: nextAliases });
       };
-     const getNextChapter = (cat) => {
-  const chapters = (SYLLABUS[cat] || []).filter(ch => !isHiddenChapter(cat, ch));
-  const next = chapters.find(ch => !data.topics?.[`${cat}-${ch}`]);
-  return next || "Finished! 🎉";
-};
+
+      const getNextChapter = (cat) => {
+        const chapters = (SYLLABUS[cat] || []).filter(ch => !isHiddenChapter(cat, ch));
+        const next = chapters.find(ch => !data.topics?.[`${cat}-${ch}`]);
+        return next || "Finished! 🎉";
+      };
+
+      // Build a list of all hidden chapters across ALL categories
+      const allHiddenChapters = useMemo(() => {
+        const result = [];
+        Object.keys(SYLLABUS).forEach(cat => {
+          SYLLABUS[cat].forEach(ch => {
+            if (isHiddenChapter(cat, ch)) result.push({ cat, ch });
+          });
+        });
+        return result;
+      }, [data.hiddenChapters]);
 
       const toggleTopicInRotation = (t) => {
         let newRot = [...(data.activeRotation || [])];
@@ -293,40 +246,28 @@
 
       const handleTopicClick = (cat, ch) => {
         const key = `${cat}-${ch}`;
-        const exists = !!data.topics?.[key];
-
         const nextTopics = { ...(data.topics || {}) };
-        if (exists) delete nextTopics[key];
+        if (nextTopics[key]) delete nextTopics[key];
         else nextTopics[key] = { date: todayISO, resource: cat === 'Psych Soc' ? data.psResource : 'Standard' };
-
         setData({ ...data, topics: nextTopics });
       };
 
-      // ---------- TASK CHECK (CARS/PRACTICE) ----------
+      // ---------- TASK CHECK ----------
       const setTaskCheck = ({ key, label, checked }) => {
         const nextChecks = { ...(data.dailyChecks || {}) };
         if (checked) nextChecks[key] = true;
         else delete nextChecks[key];
-
         setData({ ...data, dailyChecks: nextChecks });
-
         if (checked) upsertLogItem(todayISO, { type: 'task', key, label });
         else removeLogItem(todayISO, x => x.type === 'task' && x.key === key);
       };
 
       // ---------- CARDS AUTO-LOG ----------
-      // Keep ONE daily log item per date: type 'cards', key 'cards'
-const syncCardsLogForDate = (date, cardsArr) => {
-  const total = (cardsArr || [])
-    .filter(x => x.date === date)
-    .reduce((sum, x) => sum + Number(x.count || 0), 0);
-
-  if (total > 0) {
-    upsertLogItem(date, { type: 'cards', key: 'cards', label: `Cards: ${total} cards` });
-  } else {
-    removeLogItem(date, x => x.type === 'cards' && x.key === 'cards');
-  }
-};
+      const syncCardsLogForDate = (date, cardsArr) => {
+        const total = (cardsArr || []).filter(x => x.date === date).reduce((sum, x) => sum + Number(x.count || 0), 0);
+        if (total > 0) upsertLogItem(date, { type: 'cards', key: 'cards', label: `Cards: ${total} cards` });
+        else removeLogItem(date, x => x.type === 'cards' && x.key === 'cards');
+      };
 
       // ---------- CHART ----------
       const sortedScores = useMemo(() => {
@@ -337,7 +278,6 @@ const syncCardsLogForDate = (date, cardsArr) => {
         if (!chartRef.current || activeTab !== 'scores') return;
         if (chartInstance.current) chartInstance.current.destroy();
         if (!sortedScores.length) return;
-
         chartInstance.current = new Chart(chartRef.current, {
           type: 'line',
           data: {
@@ -364,7 +304,6 @@ const syncCardsLogForDate = (date, cardsArr) => {
       };
 
       const deleteFL = (id) => setData({ ...data, flScores: (data.flScores || []).filter(x => x.id !== id) });
-
       const deleteAcc = (id) => setData({ ...data, accuracy: (data.accuracy || []).filter(x => x.id !== id) });
 
       // ---------- LOGIN SCREEN ----------
@@ -372,20 +311,17 @@ const syncCardsLogForDate = (date, cardsArr) => {
         <div class="min-h-screen login-gradient flex items-center justify-center p-6">
           <div class="glass-card w-full max-w-sm p-8 space-y-6">
             <h1 class="text-3xl font-black text-center text-indigo-600 tracking-tighter italic">USER PORTAL</h1>
-
             ${authError && html`
               <p class="text-red-500 text-[10px] font-bold text-center bg-red-50 p-2 rounded-lg">
                 ${String(authError).replace('Firebase:', '').trim()}
               </p>
             `}
-
-            <form onSubmit=${(e)=>handleAuth(e, 'login')} class="space-y-4">
+            <form onSubmit=${(e) => handleAuth(e, 'login')} class="space-y-4">
               <input name="email" type="email" placeholder="Email" class="w-full p-4 bg-slate-50 rounded-2xl border" required />
               <input name="password" type="password" placeholder="Password" class="w-full p-4 bg-slate-50 rounded-2xl border" required />
-
               <div class="grid grid-cols-2 gap-3">
                 <button type="submit" class="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-[10px] shadow-xl">Sign In</button>
-                <button type="button" onClick=${(e)=>handleAuth(e, 'signup')} class="bg-white border-2 border-indigo-600 text-indigo-600 p-4 rounded-2xl font-black uppercase text-[10px]">Sign Up</button>
+                <button type="button" onClick=${(e) => handleAuth(e, 'signup')} class="bg-white border-2 border-indigo-600 text-indigo-600 p-4 rounded-2xl font-black uppercase text-[10px]">Sign Up</button>
               </div>
             </form>
           </div>
@@ -404,30 +340,23 @@ const syncCardsLogForDate = (date, cardsArr) => {
                 ${hasLoaded ? (isSyncing ? '☁️ Syncing...' : '✅ Secure') : '⏳ Loading...'}
               </p>
             </div>
-
             <div class="flex items-center space-x-2">
               <a href="https://jackwestin.com/daily/mcat-practice-passages/cars-practice-passages/" target="_blank"
                 class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">JW CARS</a>
-
               <a href="https://www.mcatofficialprep.org/" target="_blank"
                 class="text-[9px] font-black bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg uppercase">AAMC</a>
-
               <a href="https://www.uworld.com/app/index.html#/login/" target="_blank"
                 class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">UWORLD</a>
-            
-              
-              
               <a href="https://www.khanacademy.org/test-prep/mcat" target="_blank"
-                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">KA</a>            
-
-                <a href="https://app.gizmo.ai/" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">KA</a>
+              <a href="https://app.gizmo.ai/" target="_blank"
                 class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">GIZMO</a>
-
-              <button onClick=${()=>signOut(auth)} class="text-[9px] font-black text-red-400 uppercase">Logout</button>
+              <button onClick=${() => signOut(auth)} class="text-[9px] font-black text-red-400 uppercase">Logout</button>
             </div>
           </header>
 
           <main class="p-6 space-y-6 animate-slide">
+            <!-- TODAY'S PROTOCOL -->
             <section class="glass-card p-6 bg-slate-900 text-white shadow-2xl relative overflow-hidden">
               <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500 blur-[80px] opacity-20"></div>
 
@@ -435,7 +364,6 @@ const syncCardsLogForDate = (date, cardsArr) => {
                 <h2 class="text-xs font-black uppercase text-indigo-400 tracking-widest">
                   Today's Protocol · ${todayISO}
                 </h2>
-
                 <div class="flex space-x-1">
                   ${Object.keys(SYLLABUS).map(t => html`
                     <button
@@ -454,131 +382,90 @@ const syncCardsLogForDate = (date, cardsArr) => {
                 ${(data.activeRotation || []).map(topic => {
                   const checkKey = `${todayISO}-content-${topic}`;
                   const frozenKey = `${todayISO}-content-${topic}-frozen`;
-
                   const checked = !!data.dailyChecks?.[checkKey];
                   const frozen = data.dailyChecks?.[frozenKey] || '';
                   const chapterLabel = frozen || getNextChapter(topic);
 
-                  const homeKey = `${topic}-${chapterLabel}`;
-
                   return html`
-  <div class="flex items-start gap-3">
-    <input
-      type="checkbox"
-      checked=${checked}
-      onChange=${() => {
-        const nextChecked = !checked;
-
-        const nextChecks = { ...(data.dailyChecks || {}) };
-        const nextTopics = { ...(data.topics || {}) };
-
-        // Decide which chapter we are locking in for today:
-        // If user picked from dropdown, use frozen; else use next unfinished.
-        const chosenChapter = (nextChecks[frozenKey] || frozen || getNextChapter(topic));
-
-        // Guard: don’t log "Finished! 🎉" as a chapter
-        if (chosenChapter === "Finished! 🎉") return;
-
-        const homeKey = `${topic}-${chosenChapter}`;
-
-        if (nextChecked) {
-          // ✅ Mark checked + freeze selection for today
-          nextChecks[checkKey] = true;
-          nextChecks[frozenKey] = chosenChapter;
-
-          // ✅ Sync Home
-          nextTopics[homeKey] = nextTopics[homeKey] || {
-            date: todayISO,
-            resource: topic === 'Psych Soc' ? data.psResource : 'Standard'
-          };
-
-          setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
-
-          // ✅ Log
-          upsertLogItem(todayISO, {
-            type: 'content',
-            key: homeKey,
-            label: `Content Review: ${topic} — ${chosenChapter}`
-          });
-        } else {
-          // ✅ Uncheck: remove checked state + remove Home + remove Log
-          delete nextChecks[checkKey];
-
-          // NOTE: we KEEP frozenKey so your choice stays remembered for today
-          // If you want it to reset when unchecked, also do: delete nextChecks[frozenKey];
-
-          delete nextTopics[homeKey];
-
-          setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
-
-          removeLogItem(todayISO, x => x.type === 'content' && x.key === homeKey);
-        }
-      }}
-      class="todo-check w-5 h-5 rounded-full accent-indigo-500 border-none mt-1"
-    />
-
-    <div class="flex-1">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="text-sm font-bold text-slate-100">
-          Content Review:
-          <span class="text-indigo-300"> ${topic}</span>
-        </span>
-
-        ${checked && html`
-          <span class="text-[9px] font-black uppercase text-slate-400 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700">
-            locked
-          </span>
-        `}
-      </div>
-
-      <select
-        disabled=${checked}
-        class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-indigo-200
-               disabled:opacity-60 disabled:cursor-not-allowed"
-        value=${(frozen || '').trim()}
-        onChange=${e => {
-          const v = e.target.value;
-
-          const nextChecks = { ...(data.dailyChecks || {}) };
-
-          if (!v) {
-            // "Auto" mode — remove frozen
-            delete nextChecks[frozenKey];
-          } else {
-            // Freeze selected chapter for today (even before completion)
-            nextChecks[frozenKey] = v;
-          }
-
-          setData({ ...data, dailyChecks: nextChecks });
-        }}
-      >
-        <option value="">Auto (Next Unfinished)</option>
-
-        ${(SYLLABUS[topic] || []).map(ch => {
-          const doneAlready = !!data.topics?.[`${topic}-${ch}`];
-          return html`
-            <option value=${getChapterLabel(topic, ch)} disabled=${doneAlready}>
-              ${getChapterLabel(topic, ch)}${doneAlready ? ' ✓' : ''}
-            </option>
-          `;
-        })}
-      </select>
-
-      <div class="mt-2 text-[10px] font-black text-slate-400">
-        Selected:
-        <span class="text-slate-100">
-         ${(() => {
-  const raw = frozen || getNextChapter(topic);
-  return raw === "Finished! 🎉"
-    ? raw
-    : getChapterLabel(topic, raw);
-})()}
-        </span>
-      </div>
-    </div>
-  </div>
-`;
-
+                    <div class="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked=${checked}
+                        onChange=${() => {
+                          const nextChecked = !checked;
+                          const nextChecks = { ...(data.dailyChecks || {}) };
+                          const nextTopics = { ...(data.topics || {}) };
+                          const chosenChapter = (nextChecks[frozenKey] || frozen || getNextChapter(topic));
+                          if (chosenChapter === "Finished! 🎉") return;
+                          const homeKey = `${topic}-${chosenChapter}`;
+                          if (nextChecked) {
+                            nextChecks[checkKey] = true;
+                            nextChecks[frozenKey] = chosenChapter;
+                            nextTopics[homeKey] = nextTopics[homeKey] || {
+                              date: todayISO,
+                              resource: topic === 'Psych Soc' ? data.psResource : 'Standard'
+                            };
+                            setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+                            upsertLogItem(todayISO, {
+                              type: 'content', key: homeKey,
+                              label: `Content Review: ${topic} — ${chosenChapter}`
+                            });
+                          } else {
+                            delete nextChecks[checkKey];
+                            delete nextTopics[homeKey];
+                            setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
+                            removeLogItem(todayISO, x => x.type === 'content' && x.key === homeKey);
+                          }
+                        }}
+                        class="todo-check w-5 h-5 rounded-full accent-indigo-500 border-none mt-1"
+                      />
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-2">
+                          <span class="text-sm font-bold text-slate-100">
+                            Content Review:
+                            <span class="text-indigo-300"> ${topic}</span>
+                          </span>
+                          ${checked && html`
+                            <span class="text-[9px] font-black uppercase text-slate-400 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700">
+                              locked
+                            </span>
+                          `}
+                        </div>
+                        <select
+                          disabled=${checked}
+                          class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-indigo-200
+                                 disabled:opacity-60 disabled:cursor-not-allowed"
+                          value=${(frozen || '').trim()}
+                          onChange=${e => {
+                            const v = e.target.value;
+                            const nextChecks = { ...(data.dailyChecks || {}) };
+                            if (!v) delete nextChecks[frozenKey];
+                            else nextChecks[frozenKey] = v;
+                            setData({ ...data, dailyChecks: nextChecks });
+                          }}
+                        >
+                          <option value="">Auto (Next Unfinished)</option>
+                          ${(SYLLABUS[topic] || []).map(ch => {
+                            const doneAlready = !!data.topics?.[`${topic}-${ch}`];
+                            return html`
+                              <option value=${getChapterLabel(topic, ch)} disabled=${doneAlready}>
+                                ${getChapterLabel(topic, ch)}${doneAlready ? ' ✓' : ''}
+                              </option>
+                            `;
+                          })}
+                        </select>
+                        <div class="mt-2 text-[10px] font-black text-slate-400">
+                          Selected:
+                          <span class="text-slate-100">
+                            ${(() => {
+                              const raw = frozen || getNextChapter(topic);
+                              return raw === "Finished! 🎉" ? raw : getChapterLabel(topic, raw);
+                            })()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  `;
                 })}
 
                 <label class="flex items-center space-x-3 cursor-pointer">
@@ -605,11 +492,9 @@ const syncCardsLogForDate = (date, cardsArr) => {
                   <span class="text-sm font-bold text-slate-100">Practice Questions</span>
                 </label>
 
+                <!-- EXTRA CHAPTERS -->
                 <div class="mt-3 p-3 rounded-2xl border border-slate-700 bg-slate-800/60">
-                  <p class="text-[10px] font-black uppercase text-slate-300 tracking-widest mb-2">
-                    Extra Chapters (optional)
-                  </p>
-
+                  <p class="text-[10px] font-black uppercase text-slate-300 tracking-widest mb-2">Extra Chapters (optional)</p>
                   <div class="flex gap-2">
                     <select
                       class="flex-1 bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-slate-100"
@@ -625,24 +510,19 @@ const syncCardsLogForDate = (date, cardsArr) => {
                         </optgroup>
                       `)}
                     </select>
-
                     <button
                       class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase"
                       onClick=${() => {
                         if (!data.extraPick) return;
                         const [cat, ch] = data.extraPick.split('|||');
-
                         const id = Date.now();
                         const nextDailyExtras = { ...(data.dailyExtras || {}) };
                         const arr = nextDailyExtras[todayISO] ? [...nextDailyExtras[todayISO]] : [];
                         arr.unshift({ id, cat, ch });
                         nextDailyExtras[todayISO] = arr;
-
                         setData({ ...data, dailyExtras: nextDailyExtras, extraPick: '' });
                       }}
-                    >
-                      + Add
-                    </button>
+                    >+ Add</button>
                   </div>
 
                   ${(todaysExtras.length > 0) && html`
@@ -651,7 +531,6 @@ const syncCardsLogForDate = (date, cardsArr) => {
                         const checkKey = `${todayISO}-extra-${ex.id}`;
                         const checked = !!data.dailyChecks?.[checkKey];
                         const homeKey = `${ex.cat}-${ex.ch}`;
-
                         return html`
                           <div class="flex items-center justify-between gap-2">
                             <label class="flex items-center space-x-3 cursor-pointer flex-1">
@@ -660,10 +539,8 @@ const syncCardsLogForDate = (date, cardsArr) => {
                                 checked=${checked}
                                 onChange=${() => {
                                   const nextChecked = !checked;
-
                                   const nextChecks = { ...(data.dailyChecks || {}) };
                                   const nextTopics = { ...(data.topics || {}) };
-
                                   if (nextChecked) {
                                     nextChecks[checkKey] = true;
                                     nextTopics[homeKey] = nextTopics[homeKey] || {
@@ -671,124 +548,163 @@ const syncCardsLogForDate = (date, cardsArr) => {
                                       resource: ex.cat === 'Psych Soc' ? data.psResource : 'Standard'
                                     };
                                     setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
-
-                                    upsertLogItem(todayISO, {
-                                      type: 'extra',
-                                      key: homeKey,
-                                      label: `Extra Chapter: ${ex.cat} — ${ex.ch}`
-                                    });
+                                    upsertLogItem(todayISO, { type: 'extra', key: homeKey, label: `Extra Chapter: ${ex.cat} — ${ex.ch}` });
                                   } else {
                                     delete nextChecks[checkKey];
                                     delete nextTopics[homeKey];
                                     setData({ ...data, dailyChecks: nextChecks, topics: nextTopics });
-
                                     removeLogItem(todayISO, x => x.type === 'extra' && x.key === homeKey);
                                   }
                                 }}
                                 class="todo-check w-5 h-5 rounded-full accent-indigo-500 border-none" />
-
                               <span class="text-sm font-bold text-slate-100">
                                 Extra Chapter: <span class="text-indigo-300">${ex.cat} — ${ex.ch}</span>
                               </span>
                             </label>
-
                             <button
                               class="text-[10px] font-black uppercase text-red-300 bg-red-900/20 px-3 py-2 rounded-xl border border-red-900/30"
                               onClick=${() => {
                                 const nextDailyExtras = { ...(data.dailyExtras || {}) };
                                 nextDailyExtras[todayISO] = (nextDailyExtras[todayISO] || []).filter(x => x.id !== ex.id);
-
                                 const nextChecks = { ...(data.dailyChecks || {}) };
                                 delete nextChecks[checkKey];
-
                                 const nextTopics = { ...(data.topics || {}) };
                                 delete nextTopics[homeKey];
-
                                 setData({ ...data, dailyExtras: nextDailyExtras, dailyChecks: nextChecks, topics: nextTopics });
                                 removeLogItem(todayISO, x => x.type === 'extra' && x.key === homeKey);
                               }}
-                            >
-                              Delete
-                            </button>
+                            >Delete</button>
                           </div>
                         `;
                       })}
                     </div>
                   `}
                 </div>
-
               </div>
             </section>
 
+            <!-- HOME TAB CONTENT -->
             ${activeTab === 'home' && html`
               <div class="space-y-4">
+                <!-- Category tabs -->
                 <div class="flex space-x-2 custom-scroll no-scrollbar p-1">
                   ${Object.keys(SYLLABUS).map(cat => html`
                     <button
-                      onClick=${()=>setSyllabusCat(cat)}
+                      onClick=${() => setSyllabusCat(cat)}
                       class="px-5 py-2.5 rounded-full text-[10px] font-black uppercase whitespace-nowrap shadow-sm transition-all
-                        ${syllabusCat===cat ? 'bg-indigo-600 text-white' : 'bg-white border text-slate-400'}">
+                        ${syllabusCat === cat ? 'bg-indigo-600 text-white' : 'bg-white border text-slate-400'}">
                       ${cat}
                     </button>
                   `)}
                 </div>
 
+                <!-- Chapter list -->
                 <div class="grid grid-cols-1 gap-3 animate-slide">
-                 ${SYLLABUS[syllabusCat]
-  .filter(t => !isHiddenChapter(syllabusCat, t))
-  .map(t => html`
-    <div
-    <div
-  onClick=${() => handleTopicClick(syllabusCat, t)}
-  class="glass-card p-5 flex justify-between items-center ..."
->
-      <div
-        onClick=${() => handleTopicClick(syllabusCat, t)}
-        class="flex flex-col flex-1"
-      >
-        <span class="text-xs font-black ${data.topics?.[`${syllabusCat}-${t}`] ? 'text-green-700' : 'text-slate-700'}">
-          ${getChapterLabel(syllabusCat, t)}
-          ${data.chapterAliases?.[`${syllabusCat}|||${t}`] ? html`
-            <span class="ml-2 text-[9px] font-black uppercase text-slate-400">(renamed)</span>
-          ` : ''}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <button
-          onClick=${(e) => { e.stopPropagation(); renameChapterDisplay(syllabusCat, t); }}
-          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
-        >
-          Edit
-        </button>
-
-        <button
-          onClick=${(e) => { e.stopPropagation(); toggleHideChapter(syllabusCat, t); }}
-          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
-        >
-          Hide
-        </button>
-
-        <div
-          class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
-            ${data.topics?.[`${syllabusCat}-${t}`] ? 'bg-green-500 border-green-500' : 'border-slate-200'}"
-        >
-          ${data.topics?.[`${syllabusCat}-${t}`] && html`<span class="text-white text-[10px]">✓</span>`}
-        </div>
-      </div>
-    </div>
-`)}
+                  ${SYLLABUS[syllabusCat]
+                    .filter(t => !isHiddenChapter(syllabusCat, t))
+                    .map(t => html`
+                      <div class="glass-card p-5 flex justify-between items-center">
+                        <div
+                          onClick=${() => handleTopicClick(syllabusCat, t)}
+                          class="flex flex-col flex-1 cursor-pointer"
+                        >
+                          <span class="text-xs font-black ${data.topics?.[`${syllabusCat}-${t}`] ? 'text-green-700' : 'text-slate-700'}">
+                            ${getChapterLabel(syllabusCat, t)}
+                            ${data.chapterAliases?.[`${syllabusCat}|||${t}`] ? html`
+                              <span class="ml-2 text-[9px] font-black uppercase text-slate-400">(renamed)</span>
+                            ` : ''}
+                          </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <button
+                            onClick=${(e) => { e.stopPropagation(); renameChapterDisplay(syllabusCat, t); }}
+                            class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
+                          >Edit</button>
+                          <button
+                            onClick=${(e) => { e.stopPropagation(); toggleHideChapter(syllabusCat, t); }}
+                            class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
+                          >Hide</button>
+                          <div
+                            onClick=${() => handleTopicClick(syllabusCat, t)}
+                            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer
+                              ${data.topics?.[`${syllabusCat}-${t}`] ? 'bg-green-500 border-green-500' : 'border-slate-200'}"
+                          >
+                            ${data.topics?.[`${syllabusCat}-${t}`] && html`<span class="text-white text-[10px]">✓</span>`}
+                          </div>
+                        </div>
+                      </div>
+                    `)}
                 </div>
+
+                <!-- ─── HIDDEN CHAPTERS PANEL ─── -->
+                ${allHiddenChapters.length > 0 && html`
+                  <div class="glass-card overflow-hidden border border-amber-200">
+                    <!-- Toggle header -->
+                    <button
+                      onClick=${() => setShowHidden(v => !v)}
+                      class="w-full flex items-center justify-between px-5 py-4 bg-amber-50 hover:bg-amber-100 transition-colors"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-black uppercase text-amber-700 tracking-widest">
+                          Hidden Chapters
+                        </span>
+                        <span class="bg-amber-200 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          ${allHiddenChapters.length}
+                        </span>
+                      </div>
+                      <span class="text-amber-600 font-black text-sm transition-transform ${showHidden ? 'rotate-180' : ''}">
+                        ▾
+                      </span>
+                    </button>
+
+                    ${showHidden && html`
+                      <div class="divide-y divide-slate-100">
+                        ${allHiddenChapters.map(({ cat, ch }) => html`
+                          <div class="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
+                            <div class="flex flex-col">
+                              <span class="text-[10px] font-black uppercase text-indigo-400 tracking-wide">${cat}</span>
+                              <span class="text-xs font-bold text-slate-700 mt-0.5">
+                                ${getChapterLabel(cat, ch)}
+                              </span>
+                              ${data.topics?.[`${cat}-${ch}`] && html`
+                                <span class="text-[9px] font-black text-green-600 mt-0.5">✓ Completed</span>
+                              `}
+                            </div>
+                            <button
+                              onClick=${() => toggleHideChapter(cat, ch)}
+                              class="text-[9px] font-black uppercase bg-indigo-600 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-indigo-700 transition-colors"
+                            >
+                              Unhide
+                            </button>
+                          </div>
+                        `)}
+                      </div>
+
+                      <!-- Unhide All button -->
+                      <div class="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                        <button
+                          onClick=${() => {
+                            if (!confirm(`Unhide all ${allHiddenChapters.length} hidden chapters?`)) return;
+                            setData({ ...data, hiddenChapters: {} });
+                          }}
+                          class="w-full text-[10px] font-black uppercase text-red-500 bg-red-50 border border-red-100 py-2 rounded-xl hover:bg-red-100 transition-colors"
+                        >
+                          Unhide All (${allHiddenChapters.length})
+                        </button>
+                      </div>
+                    `}
+                  </div>
+                `}
               </div>
             `}
 
+            <!-- CARDS TAB -->
             ${activeTab === 'cards' && html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
                   <h2 class="text-xl font-black">Cards Logger</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">auto-syncs to Daily Log</p>
                 </div>
-
                 <button
                   onClick=${() => {
                     const nextCards = [{ id: Date.now(), date: todayISO, count: 0 }, ...(data.cards || [])];
@@ -798,20 +714,13 @@ const syncCardsLogForDate = (date, cardsArr) => {
                   class="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">
                   + Log Cards
                 </button>
-
                 ${(data.cards || []).length === 0 && html`
-                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
-                    No Cards entries yet.
-                  </div>
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">No Cards entries yet.</div>
                 `}
-
                 ${(data.cards || []).map(a => html`
                   <div class="glass-card p-5 flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3">
-                      <input
-                        type="date"
-                        value=${a.date || todayISO}
-                        class="text-xs font-black text-indigo-600"
+                      <input type="date" value=${a.date || todayISO} class="text-xs font-black text-indigo-600"
                         onInput=${e => {
                           const newDate = e.target.value;
                           const oldDate = a.date || todayISO;
@@ -819,88 +728,49 @@ const syncCardsLogForDate = (date, cardsArr) => {
                           setData({ ...data, cards: nextCards });
                           syncCardsLogForDate(oldDate, nextCards);
                           syncCardsLogForDate(newDate, nextCards);
-                        }}
-                      />
-                      <input
-                        type="number"
-                        class="w-24 text-right font-black text-xl"
-                        value=${Number(a.count || 0)}
+                        }} />
+                      <input type="number" class="w-24 text-right font-black text-xl" value=${Number(a.count || 0)}
                         onInput=${e => {
                           const nextCount = Number(e.target.value || 0);
                           const nextCards = (data.cards || []).map(x => x.id === a.id ? { ...x, count: nextCount } : x);
                           setData({ ...data, cards: nextCards });
                           syncCardsLogForDate(a.date || todayISO, nextCards);
-                        }}
-                      />
+                        }} />
                     </div>
-
-                    <button
-                      onClick=${() => deleteCards(a.id)}
-                      class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
-                      Delete
-                    </button>
+                    <button onClick=${() => deleteCards(a.id)}
+                      class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                   </div>
                 `)}
               </div>
             `}
 
+            <!-- SCORES TAB -->
             ${activeTab === 'scores' && html`
               <div class="space-y-6 animate-slide">
                 <div class="flex items-end justify-between">
                   <h2 class="text-xl font-black">Full Length Scores</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">tap delete to remove</p>
                 </div>
-
-                <div class="glass-card p-4 h-64 shadow-inner">
-                  <canvas ref=${chartRef}></canvas>
-                </div>
-
+                <div class="glass-card p-4 h-64 shadow-inner"><canvas ref=${chartRef}></canvas></div>
                 <button
-                  onClick=${() => setData({
-                    ...data,
-                    flScores: [{
-                      id: Date.now(),
-                      date: todayISO,
-                      source: 'AAMC FL',
-                      cp: 125, cars: 125, bb: 125, ps: 125
-                    }, ...(data.flScores || [])]
-                  })}
+                  onClick=${() => setData({ ...data, flScores: [{ id: Date.now(), date: todayISO, source: 'AAMC FL', cp: 125, cars: 125, bb: 125, ps: 125 }, ...(data.flScores || [])] })}
                   class="w-full bg-slate-900 text-white p-5 rounded-2xl font-black uppercase text-xs">
                   + New Full Length
                 </button>
-
                 ${(data.flScores || []).map(s => html`
                   <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between gap-3">
-                      <input
-                        type="date"
-                        value=${s.date || todayISO}
-                        class="text-xs font-black text-indigo-600"
-                        onInput=${e => setData({
-                          ...data,
-                          flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, date: e.target.value } : x)
-                        })}
-                      />
-                      <button
-                        onClick=${() => deleteFL(s.id)}
-                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
-                        Delete
-                      </button>
+                      <input type="date" value=${s.date || todayISO} class="text-xs font-black text-indigo-600"
+                        onInput=${e => setData({ ...data, flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, date: e.target.value } : x) })} />
+                      <button onClick=${() => deleteFL(s.id)}
+                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                     </div>
-
                     <div class="grid grid-cols-4 gap-3">
                       ${['cp','cars','bb','ps'].map(f => html`
                         <div class="bg-slate-50 p-2 rounded-xl text-center">
                           <p class="text-[8px] font-black text-slate-400 uppercase">${f}</p>
-                          <input
-                            type="number"
-                            class="w-full text-center font-black"
-                            value=${Number(s[f] || 0)}
-                            onInput=${e => setData({
-                              ...data,
-                              flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, [f]: Number(e.target.value) } : x)
-                            })}
-                          />
+                          <input type="number" class="w-full text-center font-black" value=${Number(s[f] || 0)}
+                            onInput=${e => setData({ ...data, flScores: (data.flScores || []).map(x => x.id === s.id ? { ...x, [f]: Number(e.target.value) } : x) })} />
                         </div>
                       `)}
                     </div>
@@ -909,113 +779,56 @@ const syncCardsLogForDate = (date, cardsArr) => {
               </div>
             `}
 
+            <!-- ACCURACY TAB -->
             ${activeTab === 'acc' && html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
                   <h2 class="text-xl font-black">Accuracy Tracker</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">sources + category + mode</p>
                 </div>
-
                 <button
-                  onClick=${() => setData({
-                    ...data,
-                    accuracy: [{
-                      id: Date.now(),
-                      date: todayISO,
-                      source: "UWorld",
-                      category: "B/B",
-                      mode: "Passage",
-                      correct: 0,
-                      total: 0
-                    }, ...(data.accuracy || [])]
-                  })}
+                  onClick=${() => setData({ ...data, accuracy: [{ id: Date.now(), date: todayISO, source: "UWorld", category: "B/B", mode: "Passage", correct: 0, total: 0 }, ...(data.accuracy || [])] })}
                   class="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">
                   + Log Practice Set
                 </button>
-
                 ${(data.accuracy || []).length === 0 && html`
-                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
-                    No accuracy entries yet.
-                  </div>
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">No accuracy entries yet.</div>
                 `}
-
                 ${(data.accuracy || []).map(r => html`
                   <div class="glass-card p-5 space-y-3">
                     <div class="flex items-center justify-between">
-                      <input
-                        type="date"
-                        value=${r.date || todayISO}
-                        class="text-xs font-black text-indigo-600"
-                        onInput=${e => setData({
-                          ...data,
-                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, date: e.target.value } : x)
-                        })}
-                      />
-                      <button
-                        onClick=${() => deleteAcc(r.id)}
-                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
-                        Delete
-                      </button>
+                      <input type="date" value=${r.date || todayISO} class="text-xs font-black text-indigo-600"
+                        onInput=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, date: e.target.value } : x) })} />
+                      <button onClick=${() => deleteAcc(r.id)}
+                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                     </div>
-
                     <div class="grid grid-cols-3 gap-2">
-                      <select
-                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                      <select class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
                         value=${r.source || "UWorld"}
-                        onChange=${e => setData({
-                          ...data,
-                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, source: e.target.value } : x)
-                        })}
-                      >
+                        onChange=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, source: e.target.value } : x) })}>
                         ${ACC_SOURCES.map(opt => html`<option value=${opt}>${opt}</option>`)}
                       </select>
-
-                      <select
-                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                      <select class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
                         value=${r.category || "B/B"}
-                        onChange=${e => setData({
-                          ...data,
-                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, category: e.target.value } : x)
-                        })}
-                      >
+                        onChange=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, category: e.target.value } : x) })}>
                         ${ACC_CATEGORIES.map(opt => html`<option value=${opt}>${opt}</option>`)}
                       </select>
-
-                      <select
-                        class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
+                      <select class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase text-slate-700"
                         value=${r.mode || "Passage"}
-                        onChange=${e => setData({
-                          ...data,
-                          accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, mode: e.target.value } : x)
-                        })}
-                      >
+                        onChange=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, mode: e.target.value } : x) })}>
                         ${ACC_MODES.map(opt => html`<option value=${opt}>${opt}</option>`)}
                       </select>
                     </div>
-
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-2">
-                        <input
-                          type="number"
-                          class="w-16 text-center font-black text-lg text-indigo-600 bg-slate-50 border border-slate-200 rounded-xl py-2"
+                        <input type="number" class="w-16 text-center font-black text-lg text-indigo-600 bg-slate-50 border border-slate-200 rounded-xl py-2"
                           value=${Number(r.correct || 0)}
-                          onInput=${e => setData({
-                            ...data,
-                            accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, correct: Number(e.target.value || 0) } : x)
-                          })}
-                        />
+                          onInput=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, correct: Number(e.target.value || 0) } : x) })} />
                         <span class="text-slate-400 font-black">/</span>
-                        <input
-                          type="number"
-                          class="w-16 text-center font-black text-lg bg-slate-50 border border-slate-200 rounded-xl py-2"
+                        <input type="number" class="w-16 text-center font-black text-lg bg-slate-50 border border-slate-200 rounded-xl py-2"
                           value=${Number(r.total || 0)}
-                          onInput=${e => setData({
-                            ...data,
-                            accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, total: Number(e.target.value || 0) } : x)
-                          })}
-                        />
+                          onInput=${e => setData({ ...data, accuracy: (data.accuracy || []).map(x => x.id === r.id ? { ...x, total: Number(e.target.value || 0) } : x) })} />
                       </div>
-
                       <div class="text-[10px] font-black uppercase text-slate-400">
                         ${r.total > 0 ? `${Math.round((r.correct / r.total) * 100)}%` : '--%'}
                       </div>
@@ -1025,21 +838,18 @@ const syncCardsLogForDate = (date, cardsArr) => {
               </div>
             `}
 
+            <!-- LOG TAB -->
             ${activeTab === 'log' && html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
                   <h2 class="text-xl font-black">Daily Log</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">shows all days</p>
                 </div>
-
                 ${Object.keys(data.dailyLog || {}).length === 0 && html`
-                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
-                    No log entries yet.
-                  </div>
+                  <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">No log entries yet.</div>
                 `}
-
                 ${Object.entries(data.dailyLog || {})
-                  .sort((a,b) => new Date(b[0]) - new Date(a[0]))
+                  .sort((a, b) => new Date(b[0]) - new Date(a[0]))
                   .map(([date, items]) => html`
                     <div class="glass-card p-5 space-y-3">
                       <div class="flex items-center justify-between">
@@ -1054,11 +864,7 @@ const syncCardsLogForDate = (date, cardsArr) => {
                           Delete Day
                         </button>
                       </div>
-
-                      ${(items || []).length === 0 && html`
-                        <div class="text-[12px] font-bold text-slate-400">No entries.</div>
-                      `}
-
+                      ${(items || []).length === 0 && html`<div class="text-[12px] font-bold text-slate-400">No entries.</div>`}
                       ${(items || []).map(item => html`
                         <div class="flex items-center justify-between gap-3">
                           <div class="text-[12px] font-bold text-slate-700">${item.label}</div>
@@ -1074,42 +880,49 @@ const syncCardsLogForDate = (date, cardsArr) => {
               </div>
             `}
 
+            <!-- HELP TAB -->
             ${activeTab === 'help' && html`
               <div class="space-y-4 animate-slide">
                 <div class="glass-card p-6 space-y-3">
                   <h2 class="text-2xl font-black tracking-tighter">Help / How This Works</h2>
                   <p class="text-[12px] font-bold text-slate-500">
-                    Checking items in <span class="font-black">Today’s Protocol</span> writes to the Daily Log and syncs to Home chapters.
+                    Checking items in <span class="font-black">Today's Protocol</span> writes to the Daily Log and syncs to Home chapters.
                     Home is for marking anything anytime (historical), but it does not automatically log.
                   </p>
                 </div>
-
+                <div class="glass-card p-6 space-y-3">
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Hidden Chapters</h3>
+                  <ul class="text-[12px] font-bold text-slate-600 space-y-2">
+                    <li><span class="text-slate-900 font-black">Hide:</span> tap the Hide button on any chapter to remove it from the list.</li>
+                    <li><span class="text-slate-900 font-black">Unhide panel:</span> scroll to the bottom of the Home tab — a collapsible amber panel shows all hidden chapters.</li>
+                    <li><span class="text-slate-900 font-black">Unhide one:</span> tap the Unhide button next to any chapter to restore it.</li>
+                    <li><span class="text-slate-900 font-black">Unhide All:</span> a single button restores everything at once.</li>
+                    <li><span class="text-slate-900 font-black">Completed chapters:</span> hidden chapters that are already marked done show a ✓ label so you know their status.</li>
+                  </ul>
+                </div>
                 <div class="glass-card p-6 space-y-3">
                   <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Content Review</h3>
                   <ul class="text-[12px] font-bold text-slate-600 space-y-2">
-                    <li><span class="text-slate-900 font-black">Pick subjects:</span> tap the small subject buttons (top-right of Today’s Protocol).</li>
-                    <li><span class="text-slate-900 font-black">Check:</span> logs “Content Review: …” + checks that chapter on Home.</li>
+                    <li><span class="text-slate-900 font-black">Pick subjects:</span> tap the small subject buttons (top-right of Today's Protocol).</li>
+                    <li><span class="text-slate-900 font-black">Check:</span> logs "Content Review: …" + checks that chapter on Home.</li>
                     <li><span class="text-slate-900 font-black">Uncheck:</span> removes from Log + unchecks that chapter on Home.</li>
                   </ul>
                 </div>
-
                 <div class="glass-card p-6 space-y-3">
                   <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Extra Chapters</h3>
                   <ul class="text-[12px] font-bold text-slate-600 space-y-2">
-                    <li><span class="text-slate-900 font-black">Add multiple:</span> pick a chapter → tap <span class="font-black">+ Add</span> as many times as you want.</li>
-                    <li><span class="text-slate-900 font-black">Each extra has its own checkbox:</span> check → logs “Extra Chapter: …” + marks Home.</li>
+                    <li><span class="text-slate-900 font-black">Add multiple:</span> pick a chapter → tap + Add as many times as you want.</li>
+                    <li><span class="text-slate-900 font-black">Each extra has its own checkbox:</span> check → logs "Extra Chapter: …" + marks Home.</li>
                     <li><span class="text-slate-900 font-black">Delete button:</span> removes the extra row + log entry + Home mark.</li>
                   </ul>
                 </div>
-
                 <div class="glass-card p-6 space-y-3">
                   <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Cards Logger</h3>
                   <ul class="text-[12px] font-bold text-slate-600 space-y-2">
-                    <li><span class="text-slate-900 font-black">Auto-log:</span> Daily Log shows “Cards: ___ cards”.</li>
+                    <li><span class="text-slate-900 font-black">Auto-log:</span> Daily Log shows "Cards: ___ cards".</li>
                     <li><span class="text-slate-900 font-black">Auto-update:</span> editing counts updates the log instantly.</li>
                   </ul>
                 </div>
-
                 <div class="glass-card p-6 space-y-3">
                   <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Accuracy</h3>
                   <ul class="text-[12px] font-bold text-slate-600 space-y-2">
@@ -1131,8 +944,8 @@ const syncCardsLogForDate = (date, cardsArr) => {
               { key: 'log', label: 'log' },
               { key: 'help', label: 'help' }
             ].map(t => html`
-              <button onClick=${() => setActiveTab(t.key)} class="nav-item ${activeTab===t.key?'active':'inactive'}">
-                <div class="w-6 h-6 mb-1 rounded-lg flex items-center justify-center ${activeTab===t.key?'bg-indigo-600 text-white shadow-lg':'bg-slate-100'}">
+              <button onClick=${() => setActiveTab(t.key)} class="nav-item ${activeTab === t.key ? 'active' : 'inactive'}">
+                <div class="w-6 h-6 mb-1 rounded-lg flex items-center justify-center ${activeTab === t.key ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100'}">
                   <span class="text-[10px] font-black">
                     ${t.key === 'help' ? '?' : t.key[0].toUpperCase()}
                   </span>
