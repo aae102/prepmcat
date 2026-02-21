@@ -83,14 +83,14 @@
 
     const DEFAULT_DATA = {
       topics: {}, chapterAliases: {}, hiddenChapters: {},
-      customChapters: {},   // { "Gen Chem": [{id, name}], ... }
-      deletedChapters: {},  // { "Gen Chem|||Ch 1: Atomic Structure": true }
+      customChapters: {},
+      deletedChapters: {},
       activeRotation: ["Biology","Psych Soc","Biochem"],
       psResource: "300 Page Doc",
       cards: [], flScores: [], accuracy: [], carsLog: [],
       dailyChecks: {}, dailyExtras: {}, dailyLog: {},
       extraPick: "",
-      blueprintDiagnostic: null  // {score, date}
+      blueprintDiagnostic: null
     };
 
     const App = () => {
@@ -110,7 +110,6 @@
       const carsChartRef = useRef(null);
       const carsChartInstance = useRef(null);
 
-      // AUTH
       const handleAuth = async (e, mode) => {
         e.preventDefault(); setAuthError('');
         const form = e.currentTarget?.tagName === 'FORM' ? e.currentTarget : e.currentTarget?.closest('form');
@@ -120,7 +119,6 @@
         } catch (err) { setAuthError(err.code || err.message); }
       };
 
-      // LOAD
       useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
           setHasLoaded(false);
@@ -136,7 +134,6 @@
         return unsub;
       }, []);
 
-      // SYNC
       useEffect(() => {
         if (!user || !hasLoaded) return;
         setIsSyncing(true);
@@ -149,7 +146,6 @@
         return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
       }, [data, user, hasLoaded]);
 
-      // LOG HELPERS
       const upsertLogItem = (date, item) => {
         setData(prev => {
           const arr = (prev.dailyLog?.[date] || []).filter(x => !(x.type === item.type && x.key === item.key));
@@ -164,7 +160,6 @@
         }));
       };
 
-      // CHAPTER HELPERS
       const chapterKey = (cat, ch) => `${cat}|||${ch}`;
       const getChapterLabel = (cat, ch) => { const a = data.chapterAliases?.[chapterKey(cat, ch)]; return (a && String(a).trim()) ? a : ch; };
       const isHiddenChapter = (cat, ch) => !!data.hiddenChapters?.[chapterKey(cat, ch)];
@@ -181,7 +176,6 @@
         if (!t) delete a[k]; else a[k] = t;
         setData({ ...data, chapterAliases: a });
       };
-      // Returns merged list: default (minus deleted) + custom, minus hidden
       const getFullChapterList = (cat) => {
         const base = (SYLLABUS[cat] || []).filter(ch => !data.deletedChapters?.[(cat+"|||"+ch)]);
         const custom = (data.customChapters?.[cat] || []).map(x => x.name);
@@ -216,7 +210,6 @@
         else removeLogItem(date, x => x.type === 'cards' && x.key === 'cards');
       };
 
-      // DERIVED DATA
       const subjectProgress = useMemo(() => Object.keys(SYLLABUS).map(cat => {
         const chapters = getFullChapterList(cat);
         const total = chapters.length;
@@ -285,7 +278,6 @@
         return r;
       }, [data.hiddenChapters, data.customChapters, data.deletedChapters]);
 
-      // CHARTS
       useEffect(() => {
         if (!chartRef.current || activeTab !== 'scores') return;
         if (chartInstance.current) chartInstance.current.destroy();
@@ -320,13 +312,11 @@
         });
       }, [activeTab, sortedCarsLog]);
 
-      // DELETES
       const deleteCards = (id) => { const row=(data.cards||[]).find(x=>x.id===id); const nc=(data.cards||[]).filter(x=>x.id!==id); setData({...data,cards:nc}); if(row?.date) syncCardsLogForDate(row.date,nc); };
       const deleteFL = (id) => setData({...data,flScores:(data.flScores||[]).filter(x=>x.id!==id)});
       const deleteAcc = (id) => setData({...data,accuracy:(data.accuracy||[]).filter(x=>x.id!==id)});
       const deleteCars = (id) => setData({...data,carsLog:(data.carsLog||[]).filter(x=>x.id!==id)});
 
-      // LOGIN
       if (!user) return html`
         <div class="min-h-screen login-gradient flex items-center justify-center p-6">
           <div class="glass-card w-full max-w-sm p-8 space-y-6">
@@ -484,11 +474,9 @@
               </div>
             </section>
 
-            <!-- ═══════════════ HOME TAB ═══════════════ -->
+            <!-- HOME TAB -->
             ${activeTab==='home'&&html`
               <div class="space-y-4">
-
-                <!-- PROGRESS OVERVIEW -->
                 <div class="glass-card p-5 space-y-4">
                   <div class="flex items-center justify-between">
                     <h2 class="text-sm font-black uppercase text-slate-700 tracking-wider">Overall Progress</h2>
@@ -518,7 +506,6 @@
                   </div>
                 </div>
 
-                <!-- ACTIVITY HEATMAP -->
                 <div class="glass-card p-5">
                   <div class="flex items-center justify-between mb-3">
                     <h2 class="text-sm font-black uppercase text-slate-700 tracking-wider">Activity Heatmap</h2>
@@ -543,7 +530,6 @@
                   </div>
                 </div>
 
-                <!-- CATEGORY TABS -->
                 <div class="flex space-x-2 custom-scroll no-scrollbar p-1">
                   ${Object.keys(SYLLABUS).map(cat=>{const sp=subjectProgress.find(s=>s.cat===cat);return html`
                     <button onClick=${()=>setSyllabusCat(cat)}
@@ -552,7 +538,6 @@
                     </button>`;})}
                 </div>
 
-                <!-- CHAPTER LIST -->
                 <div class="grid grid-cols-1 gap-3 animate-slide">
                   ${getFullChapterList(syllabusCat).filter(t=>!isHiddenChapter(syllabusCat,t)).map(t=>{
                     const isCustom = !(SYLLABUS[syllabusCat]||[]).includes(t);
@@ -580,10 +565,8 @@
                             : "Permanently delete '"+t+"' from "+syllabusCat+"? (can restore via un-delete)";
                           if(!confirm(msg)) return;
                           if(isCustom){
-                            // remove from customChapters
                             const nc = {...(data.customChapters||{})};
                             nc[syllabusCat] = (nc[syllabusCat]||[]).filter(x=>x.name!==t);
-                            // clean up topic/alias
                             const nt={...(data.topics||{})};delete nt[syllabusCat+"-"+t];
                             const na={...(data.chapterAliases||{})};delete na[syllabusCat+"|||"+t];
                             setData({...data,customChapters:nc,topics:nt,chapterAliases:na});
@@ -605,7 +588,6 @@
                   })}
                 </div>
 
-                <!-- ADD CUSTOM CHAPTER -->
                 <div class="glass-card p-4 border border-violet-200 bg-violet-50/40">
                   <p class="text-[10px] font-black uppercase text-violet-600 tracking-widest mb-3">
                     + Add Custom Chapter to ${syllabusCat}
@@ -646,7 +628,6 @@
                   </div>
                 </div>
 
-                <!-- DELETED CHAPTERS (restore panel) -->
                 ${Object.keys(data.deletedChapters||{}).filter(k=>k.startsWith(syllabusCat+"|||")).length>0&&html`
                   <div class="glass-card overflow-hidden border border-rose-200">
                     <div class="px-4 py-3 bg-rose-50 flex items-center justify-between">
@@ -673,7 +654,6 @@
                     </div>
                   </div>`}
 
-                <!-- HIDDEN CHAPTERS PANEL -->
                 ${allHiddenChapters.length>0&&html`
                   <div class="glass-card overflow-hidden border border-amber-200">
                     <button onClick=${()=>setShowHidden(v=>!v)} class="w-full flex items-center justify-between px-5 py-4 bg-amber-50">
@@ -705,7 +685,7 @@
                   </div>`}
               </div>`}
 
-            <!-- ═══════════════ CARS TAB ═══════════════ -->
+            <!-- CARS TAB -->
             ${activeTab==='cars'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -791,7 +771,7 @@
                 })}
               </div>`}
 
-            <!-- ═══════════════ CARDS TAB ═══════════════ -->
+            <!-- CARDS TAB -->
             ${activeTab==='cards'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -814,7 +794,7 @@
                   </div>`)}
               </div>`}
 
-            <!-- ═══════════════ SCORES TAB ═══════════════ -->
+            <!-- SCORES TAB -->
             ${activeTab==='scores'&&html`
               <div class="space-y-5 animate-slide">
                 <h2 class="text-xl font-black">Full Length Scores</h2>
@@ -867,7 +847,7 @@
                   </div>`)}
               </div>`}
 
-            <!-- ═══════════════ ACCURACY TAB ═══════════════ -->
+            <!-- ACCURACY TAB -->
             ${activeTab==='acc'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -914,7 +894,7 @@
                   </div>`)}
               </div>`}
 
-            <!-- ═══════════════ LOG TAB ═══════════════ -->
+            <!-- LOG TAB -->
             ${activeTab==='log'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -939,14 +919,15 @@
                   </div>`)}
               </div>`}
 
-            <!-- ═══════════════ HELP TAB ═══════════════ -->
+            <!-- HELP TAB -->
             ${activeTab==='help'&&html`
               <div class="space-y-4 animate-slide">
                 ${[
                   {title:"Progress Overview",color:"text-indigo-600",items:[["Overall bar","Total chapters done across all 6 subjects."],["Per-subject bars","Colour-coded bar + done/total per subject."],["Category tabs","Done/total count right on each button."]]},
                   {title:"Activity Heatmap + Streak",color:"text-purple-600",items:[["10-week grid","Each cell = one day; darker = more log entries."],["Today ring","Indigo ring marks today's cell."],["🔥 Streak","Header badge counts consecutive active days."]]},
-                  {title:"CARS Logger (new tab)",color:"text-amber-600",items:[["Per-passage log","Record source, correct/total, notes."],["Score trend chart","Auto-appears once you have 2+ scored entries."],["Color-coded %","Green ≥75%, amber ≥60%, red <60%."]]},
+                  {title:"CARS Logger",color:"text-amber-600",items:[["Per-passage log","Record source, correct/total, notes."],["Score trend chart","Auto-appears once you have 2+ scored entries."],["Color-coded %","Green ≥75%, amber ≥60%, red <60%."]]},
                   {title:"Full Length Scores",color:"text-green-600",items:[["Composite score","Auto-calculated (C/P+CARS+B/B+P/S) shown per FL."],["Stats banner","Latest / Best / Average / Trend across all FLs."]]},
+                  {title:"Readiness Calculator",color:"text-cyan-600",items:[["FL Scores (30%)","Avg of 3 most recent FLs, converted from 472–528 scale."],["AAMC (27%)","Direct QPack / Section Bank / IQB accuracy."],["UWorld (20%)","Calibrated up (~×1.18+8) to match AAMC difficulty."],["CARS (13%)","Average passage accuracy."],["Content (10%)","Chapter completion percentage."],["Blueprint Baseline","Shown as improvement reference — not included in weighting."]]},
                   {title:"Accuracy",color:"text-blue-600",items:[["Color coding","Green ≥70%, amber <70%."],["Source/Category/Mode","Log exactly where each set came from."]]},
                   {title:"Hidden Chapters",color:"text-slate-600",items:[["Hide","Removes from list without deleting progress."],["Unhide panel","Amber panel at bottom of Home tab."]]}
                 ].map(s=>html`
@@ -956,8 +937,7 @@
                   </div>`)}
               </div>`}
 
-
-            <!-- ═══════════════ READINESS TAB ═══════════════ -->
+            <!-- READINESS TAB -->
             ${activeTab==='ready'&&html`
               <div class="space-y-5 animate-slide">
 
@@ -1007,8 +987,6 @@
                   const contentPct=chTotal>0?Math.round((chDone/chTotal)*100):0;
 
                   // ── 2. UWORLD % → AAMC-EQUIVALENT ────────────────────────
-                  // UWorld is significantly harder than AAMC.
-                  // Community-calibrated conversion: aamc_equiv = (uw% × 1.18) + 8, cap 100
                   const uwEntries=(data.accuracy||[]).filter(x=>x.source==='UWorld'&&x.total>0);
                   const uwRaw=uwEntries.length>0
                     ?Math.round(uwEntries.reduce((s,x)=>s+(x.correct/x.total),0)/uwEntries.length*100):null;
@@ -1024,16 +1002,36 @@
                   const carsPct=carsEntries.length>0
                     ?Math.round(carsEntries.reduce((s,x)=>s+(x.correct/x.total),0)/carsEntries.length*100):null;
 
-                  // ── WEIGHTS (re-normalised if data missing) ───────────────
-                  // AAMC 40% | UWorld(calibrated) 25% | CARS 20% | Content 15%
+                  // ── 5. FULL LENGTH SCORES ─────────────────────────────────
+                  // Convert composite (472–528) to 0–100% scale: (score-472)/56*100
+                  const flComp=flWithComposite.filter(s=>s.composite>0);
+                  const flSorted=[...flComp].sort((a,b)=>new Date(b.date)-new Date(a.date));
+                  const flLatest=flSorted[0]||null;
+                  // Avg of most recent 3 FLs for stability
+                  const flRecent=flSorted.slice(0,3);
+                  const flAvgComposite=flRecent.length>0
+                    ?Math.round(flRecent.reduce((s,x)=>s+x.composite,0)/flRecent.length):null;
+                  const flPct=flAvgComposite!==null
+                    ?Math.min(100,Math.max(0,Math.round(((flAvgComposite-472)/56)*100))):null;
+
+                  // ── 6. BLUEPRINT DIAGNOSTIC ──────────────────────────────
+                  const bpScore=data.blueprintDiagnostic?.score;
+                  const bpPct=bpScore?Math.min(100,Math.max(0,Math.round(((bpScore-472)/56)*100))):null;
+
+                  // ── WEIGHTS (re-normalised when data missing) ─────────────
+                  // FL 30% | AAMC 27% | UWorld(calibrated) 20% | CARS 13% | Content 10%
                   const components=[
-                    {key:'aamc',   label:'AAMC',    pct:aamcPct,      weight:0.40, color:'#10b981', rawLabel:null,
+                    {key:'fl',     label:'Full Lengths', pct:flPct,        weight:0.30, color:'#06b6d4',
+                     rawLabel:flAvgComposite!==null?('Avg composite: '+flAvgComposite+(flLatest?' · Latest: '+flLatest.composite+' ('+((new Date(flLatest.date)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+')'  :'')):null,
+                     desc:'Avg of '+(flRecent.length||0)+' most recent FL'+(flRecent.length!==1?'s':'')+' — converted from 472–528 scale'},
+                    {key:'aamc',   label:'AAMC',         pct:aamcPct,      weight:0.27, color:'#10b981', rawLabel:null,
                      desc:'QPack / Section Bank / IQB — direct score'},
-                    {key:'uworld', label:'UWorld',  pct:uwCalibrated, weight:0.25, color:'#6366f1', rawLabel:uwRaw!==null?'Raw: '+uwRaw+'%':null,
+                    {key:'uworld', label:'UWorld',       pct:uwCalibrated, weight:0.20, color:'#6366f1',
+                     rawLabel:uwRaw!==null?('Raw: '+uwRaw+'%'):null,
                      desc:'Harder than AAMC — calibrated to AAMC scale'},
-                    {key:'cars',   label:'CARS',    pct:carsPct,      weight:0.20, color:'#f59e0b', rawLabel:null,
+                    {key:'cars',   label:'CARS',         pct:carsPct,      weight:0.13, color:'#f59e0b', rawLabel:null,
                      desc:'Passage accuracy average'},
-                    {key:'content',label:'Content', pct:contentPct,   weight:0.15, color:'#8b5cf6', rawLabel:null,
+                    {key:'content',label:'Content',      pct:contentPct,   weight:0.10, color:'#8b5cf6', rawLabel:null,
                      desc:'Chapters completed across all subjects'},
                   ];
                   const available=components.filter(c=>c.pct!==null);
@@ -1053,14 +1051,10 @@
                   ];
                   const pred=readiness!==null?scoreMap.find(s=>readiness>=s.min):null;
 
-                  const bpScore=data.blueprintDiagnostic?.score;
                   const projectedMid=pred?Math.round((pred.lo+pred.hi)/2):null;
                   const improvement=bpScore&&projectedMid?projectedMid-bpScore:null;
 
-                  const missing=components.filter(c=>{
-                    if(c.key==='uworld') return uwRaw===null;
-                    return c.pct===null;
-                  });
+                  const missing=components.filter(c=>c.pct===null&&!(c.key==='content'));
 
                   return html`
                     <!-- Hero Score Card -->
@@ -1072,7 +1066,7 @@
                           <div class="flex items-start justify-between mb-4">
                             <div>
                               <p class="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Exam Readiness Score</p>
-                              <p class="text-[9px] text-slate-500 mt-0.5">Based on ${available.length}/4 data sources</p>
+                              <p class="text-[9px] text-slate-500 mt-0.5">Based on ${available.length}/5 data sources</p>
                             </div>
                             ${pred&&html`
                               <div class=${"text-xs font-black uppercase px-3 py-1.5 rounded-xl bg-white/10 "+pred.text}>
@@ -1092,15 +1086,53 @@
                                 <p class=${"text-3xl font-black "+pred.text}>${pred.lo}–${pred.hi}</p>
                                 ${bpScore?html`
                                   <div class="flex items-center gap-2 mt-1">
-                                    <span class="text-[10px] font-bold text-slate-400">Baseline ${bpScore}</span>
+                                    <span class="text-[10px] font-bold text-slate-400">Baseline: ${bpScore}</span>
                                     ${improvement!==null&&improvement>0?html`
                                       <span class="text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-lg">
-                                        +${improvement} pts projected 🚀
+                                        +${improvement} pts 🚀
                                       </span>`:improvement!==null&&improvement===0?html`
-                                      <span class="text-[10px] font-black text-slate-400">holding steady</span>`:null}
+                                      <span class="text-[10px] font-black text-slate-400">holding steady</span>
+                                    `:improvement!==null&&improvement<0?html`
+                                      <span class="text-[10px] font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg">
+                                        ${improvement} pts from baseline
+                                      </span>`:null}
                                   </div>`:null}
                               </div>
                             </div>
+
+                            <!-- FL mini-summary if available -->
+                            ${flComp.length>0&&html`
+                              <div class="mb-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+                                <p class="text-[9px] font-black uppercase text-cyan-400 tracking-widest mb-2">Full Length Summary</p>
+                                <div class="flex gap-4">
+                                  <div class="text-center">
+                                    <p class="text-[8px] font-black uppercase text-slate-500">FLs Logged</p>
+                                    <p class="text-lg font-black text-white">${flComp.length}</p>
+                                  </div>
+                                  ${flLatest&&html`
+                                    <div class="text-center">
+                                      <p class="text-[8px] font-black uppercase text-slate-500">Latest</p>
+                                      <p class="text-lg font-black text-cyan-300">${flLatest.composite}</p>
+                                    </div>`}
+                                  ${flComp.length>1&&html`
+                                    <div class="text-center">
+                                      <p class="text-[8px] font-black uppercase text-slate-500">Best</p>
+                                      <p class="text-lg font-black text-emerald-300">${Math.max(...flComp.map(x=>x.composite))}</p>
+                                    </div>`}
+                                  ${flAvgComposite&&html`
+                                    <div class="text-center">
+                                      <p class="text-[8px] font-black uppercase text-slate-500">3-FL Avg</p>
+                                      <p class="text-lg font-black text-white">${flAvgComposite}</p>
+                                    </div>`}
+                                  ${bpScore&&flLatest&&html`
+                                    <div class="text-center">
+                                      <p class="text-[8px] font-black uppercase text-slate-500">FL Growth</p>
+                                      <p class=${"text-lg font-black "+(flLatest.composite-bpScore>=0?'text-emerald-300':'text-red-300')}>
+                                        ${flLatest.composite-bpScore>=0?'+':''}${flLatest.composite-bpScore}
+                                      </p>
+                                    </div>`}
+                                </div>
+                              </div>`}
 
                             <!-- Readiness progress bar -->
                             <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
@@ -1114,7 +1146,7 @@
                           `:html`
                             <div class="py-4 text-center">
                               <p class="text-slate-400 font-bold">No data yet</p>
-                              <p class="text-slate-500 text-[11px] mt-1">Log accuracy entries to generate your readiness score</p>
+                              <p class="text-slate-500 text-[11px] mt-1">Log accuracy entries or FL scores to generate your readiness score</p>
                             </div>`}
                         </div>
                       </div>
@@ -1125,11 +1157,16 @@
                           <div class="pt-4 first:pt-0">
                             <div class="flex justify-between items-start mb-2">
                               <div>
-                                <span class="text-xs font-black text-slate-800">${c.label}</span>
-                                ${c.key==='uworld'&&html`
-                                  <span class="ml-1.5 text-[8px] font-black uppercase bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-md">calibrated</span>`}
+                                <div class="flex items-center gap-1.5">
+                                  <span class="text-xs font-black text-slate-800">${c.label}</span>
+                                  ${c.key==='uworld'&&html`
+                                    <span class="text-[8px] font-black uppercase bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-md">calibrated</span>`}
+                                  ${c.key==='fl'&&html`
+                                    <span class="text-[8px] font-black uppercase bg-cyan-100 text-cyan-600 px-1.5 py-0.5 rounded-md">scaled</span>`}
+                                </div>
                                 <p class="text-[9px] font-bold text-slate-400 mt-0.5">${c.desc}</p>
-                                ${c.rawLabel&&html`<p class="text-[9px] font-black text-slate-500 mt-0.5">${c.rawLabel} → <span class="text-indigo-600">${c.pct}% AAMC-equiv</span></p>`}
+                                ${c.rawLabel&&html`<p class="text-[9px] font-black text-slate-500 mt-0.5">${c.rawLabel}</p>`}
+                                ${c.key==='uworld'&&c.rawLabel&&html`<p class="text-[9px] font-black text-indigo-600">→ AAMC-equiv: ${c.pct}%</p>`}
                               </div>
                               <div class="text-right">
                                 <span class=${"text-base font-black "+(c.pct===null?'text-slate-300':c.pct>=75?'text-emerald-600':c.pct>=60?'text-amber-500':'text-red-500')}>
@@ -1161,21 +1198,19 @@
                       </div>
                     </div>
 
-                    <!-- UWorld Calibration Explainer -->
+                    <!-- UWorld + FL Scale Explainer -->
                     <div class="glass-card p-5 border border-indigo-100 bg-indigo-50/30">
-                      <p class="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-2">UWorld Calibration Note</p>
-                      <p class="text-[11px] font-bold text-slate-600 leading-relaxed">
-                        UWorld is intentionally harder than AAMC. A <span class="font-black text-slate-800">60% on UWorld</span> is roughly equivalent to
-                        <span class="font-black text-indigo-700">~79% on AAMC</span> material.
-                        A <span class="font-black text-slate-800">70% on UWorld</span> ≈
-                        <span class="font-black text-indigo-700">~91% AAMC-equivalent</span>.
-                        Your UWorld score is scaled up before entering the readiness calculation so it doesn't drag your score down unfairly.
+                      <p class="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-2">Score Scaling Notes</p>
+                      <p class="text-[11px] font-bold text-slate-600 leading-relaxed mb-3">
+                        <span class="font-black text-slate-800">UWorld</span> is calibrated up (×1.18 + 8) since it's harder than AAMC. 
+                        <span class="font-black text-slate-800">FL scores</span> are converted from the 472–528 MCAT scale to a 0–100% readiness scale 
+                        using <span class="font-black text-indigo-700">(composite − 472) ÷ 56</span>. The avg of your 3 most recent FLs is used.
                       </p>
-                      <div class="mt-3 grid grid-cols-4 gap-2">
-                        ${[[50,67],[55,73],[60,79],[65,85],[70,91],[75,97]].slice(0,4).map(([uw,eq])=>html`
+                      <div class="grid grid-cols-4 gap-2">
+                        ${[[500,50],[505,59],[510,68],[515,77],[518,82],[520,86],[524,93],[528,100]].slice(0,4).map(([score,pct])=>html`
                           <div class="bg-white rounded-xl p-2 text-center border border-indigo-100">
-                            <p class="text-[9px] font-black text-slate-400">UW ${uw}%</p>
-                            <p class="text-xs font-black text-indigo-600">≈${eq}%</p>
+                            <p class="text-[9px] font-black text-slate-400">FL ${score}</p>
+                            <p class="text-xs font-black text-indigo-600">${pct}%</p>
                           </div>`)}
                       </div>
                     </div>
@@ -1202,7 +1237,7 @@
 
           </main>
 
-          <!-- BOTTOM NAV (7 tabs) -->
+          <!-- BOTTOM NAV -->
           <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t h-20 flex items-center px-1 z-50">
             ${[
               {key:'home',label:'Home',icon:'H'},
