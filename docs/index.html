@@ -100,11 +100,14 @@
 
     const DEFAULT_DATA = {
       topics: {},
-
+        chapterAliases: {}, // key: "Cat|||Chapter" -> "My Display Name"
+      // Per-user chapter customization (display only)
+      chapterAliases: {},      // key: "Cat|||Chapter" -> "My Display Name"
+      hiddenChapters: {},      // key: "Cat|||Chapter" -> true
       activeRotation: ["Biology", "Psych Soc", "Biochem"],
       psResource: "300 Page Doc",
 
-      anki: [],
+      cards: [],
       flScores: [],
       accuracy: [],
 
@@ -240,11 +243,46 @@
       };
 
       // ---------- CHAPTER HELPERS ----------
-      const getNextChapter = (cat) => {
-        const chapters = SYLLABUS[cat] || [];
-        const next = chapters.find(ch => !data.topics?.[`${cat}-${ch}`]);
-        return next || "Finished! 🎉";
+            const chapterKey = (cat, ch) => `${cat}|||${ch}`;
+
+      const getChapterLabel = (cat, ch) => {
+        const k = chapterKey(cat, ch);
+        const alias = data.chapterAliases?.[k];
+        return (alias && String(alias).trim()) ? alias : ch;
       };
+
+      const isHiddenChapter = (cat, ch) => {
+        const k = chapterKey(cat, ch);
+        return !!data.hiddenChapters?.[k];
+      };
+
+      const toggleHideChapter = (cat, ch) => {
+        const k = chapterKey(cat, ch);
+        const nextHidden = { ...(data.hiddenChapters || {}) };
+        if (nextHidden[k]) delete nextHidden[k];
+        else nextHidden[k] = true;
+        setData({ ...data, hiddenChapters: nextHidden });
+      };
+
+      const renameChapterDisplay = (cat, ch) => {
+        const k = chapterKey(cat, ch);
+        const current = data.chapterAliases?.[k] || "";
+        const next = prompt(`Rename display name for:\n${cat} — ${ch}\n\n(Leave blank to reset)`, current);
+        if (next === null) return; // user canceled
+
+        const nextAliases = { ...(data.chapterAliases || {}) };
+        const trimmed = String(next).trim();
+
+        if (!trimmed) delete nextAliases[k];
+        else nextAliases[k] = trimmed;
+
+        setData({ ...data, chapterAliases: nextAliases });
+      };
+     const getNextChapter = (cat) => {
+  const chapters = (SYLLABUS[cat] || []).filter(ch => !isHiddenChapter(cat, ch));
+  const next = chapters.find(ch => !data.topics?.[`${cat}-${ch}`]);
+  return next || "Finished! 🎉";
+};
 
       const toggleTopicInRotation = (t) => {
         let newRot = [...(data.activeRotation || [])];
@@ -276,19 +314,19 @@
         else removeLogItem(todayISO, x => x.type === 'task' && x.key === key);
       };
 
-      // ---------- ANKI AUTO-LOG ----------
-      // Keep ONE daily log item per date: type 'anki', key 'anki'
-      const syncAnkiLogForDate = (date, ankiArr) => {
-        const total = ankiArr
-          .filter(x => x.date === date)
-          .reduce((sum, x) => sum + Number(x.count || 0), 0);
+      // ---------- CARDS AUTO-LOG ----------
+      // Keep ONE daily log item per date: type 'cards', key 'cards'
+const syncCardsLogForDate = (date, cardsArr) => {
+  const total = (cardsArr || [])
+    .filter(x => x.date === date)
+    .reduce((sum, x) => sum + Number(x.count || 0), 0);
 
-        if (total > 0) {
-          upsertLogItem(date, { type: 'anki', key: 'anki', label: `Anki: ${total} cards` });
-        } else {
-          removeLogItem(date, x => x.type === 'anki' && x.key === 'anki');
-        }
-      };
+  if (total > 0) {
+    upsertLogItem(date, { type: 'cards', key: 'cards', label: `Cards: ${total} cards` });
+  } else {
+    removeLogItem(date, x => x.type === 'cards' && x.key === 'cards');
+  }
+};
 
       // ---------- CHART ----------
       const sortedScores = useMemo(() => {
@@ -318,11 +356,11 @@
       useEffect(() => { renderChart(); }, [activeTab, sortedScores]);
 
       // ---------- DELETE HANDLERS ----------
-      const deleteAnki = (id) => {
-        const row = (data.anki || []).find(x => x.id === id);
-        const nextAnki = (data.anki || []).filter(x => x.id !== id);
-        setData({ ...data, anki: nextAnki });
-        if (row?.date) syncAnkiLogForDate(row.date, nextAnki);
+      const deleteCards = (id) => {
+        const row = (data.cards || []).find(x => x.id === id);
+        const nextCards = (data.cards || []).filter(x => x.id !== id);
+        setData({ ...data, cards: nextCards });
+        if (row?.date) syncCardsLogForDate(row.date, nextCards);
       };
 
       const deleteFL = (id) => setData({ ...data, flScores: (data.flScores || []).filter(x => x.id !== id) });
@@ -376,12 +414,14 @@
 
               <a href="https://www.uworld.com/app/index.html#/login/" target="_blank"
                 class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">UWORLD</a>
-                
-              <a href="https://www.kaptest.com/resources/myaccount" target="_blank"
-                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">KAPLAN</a>
+            
+              
               
               <a href="https://www.khanacademy.org/test-prep/mcat" target="_blank"
                 class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">KA</a>            
+
+                <a href="https://app.gizmo.ai/" target="_blank"
+                class="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg uppercase">GIZMO</a>
 
               <button onClick=${()=>signOut(auth)} class="text-[9px] font-black text-red-400 uppercase">Logout</button>
             </div>
@@ -517,8 +557,8 @@
         ${(SYLLABUS[topic] || []).map(ch => {
           const doneAlready = !!data.topics?.[`${topic}-${ch}`];
           return html`
-            <option value=${ch} disabled=${doneAlready}>
-              ${ch}${doneAlready ? ' ✓' : ''}
+            <option value=${getChapterLabel(topic, ch)} disabled=${doneAlready}>
+              ${getChapterLabel(topic, ch)}${doneAlready ? ' ✓' : ''}
             </option>
           `;
         })}
@@ -527,7 +567,12 @@
       <div class="mt-2 text-[10px] font-black text-slate-400">
         Selected:
         <span class="text-slate-100">
-          ${(frozen || getNextChapter(topic))}
+         ${(() => {
+  const raw = frozen || getNextChapter(topic);
+  return raw === "Finished! 🎉"
+    ? raw
+    : getChapterLabel(topic, raw);
+})()}
         </span>
       </div>
     </div>
@@ -689,50 +734,78 @@
                 </div>
 
                 <div class="grid grid-cols-1 gap-3 animate-slide">
-                  ${SYLLABUS[syllabusCat].map(t => html`
-                    <div
-                      onClick=${() => handleTopicClick(syllabusCat, t)}
-                      class="glass-card p-5 flex justify-between items-center transition-all cursor-pointer hover:border-indigo-300
-                        ${data.topics?.[`${syllabusCat}-${t}`] ? 'border-green-400 bg-green-50/50 shadow-inner' : ''}">
-                      <div class="flex flex-col">
-                        <span class="text-xs font-black ${data.topics?.[`${syllabusCat}-${t}`] ? 'text-green-700' : 'text-slate-700'}">
-                          ${t}
-                        </span>
-                      </div>
-                      <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
-                        ${data.topics?.[`${syllabusCat}-${t}`] ? 'bg-green-500 border-green-500' : 'border-slate-200'}">
-                        ${data.topics?.[`${syllabusCat}-${t}`] && html`<span class="text-white text-[10px]">✓</span>`}
-                      </div>
-                    </div>
-                  `)}
+                 ${SYLLABUS[syllabusCat]
+  .filter(t => !isHiddenChapter(syllabusCat, t))
+  .map(t => html`
+    <div
+    <div
+  onClick=${() => handleTopicClick(syllabusCat, t)}
+  class="glass-card p-5 flex justify-between items-center ..."
+>
+      <div
+        onClick=${() => handleTopicClick(syllabusCat, t)}
+        class="flex flex-col flex-1"
+      >
+        <span class="text-xs font-black ${data.topics?.[`${syllabusCat}-${t}`] ? 'text-green-700' : 'text-slate-700'}">
+          ${getChapterLabel(syllabusCat, t)}
+          ${data.chapterAliases?.[`${syllabusCat}|||${t}`] ? html`
+            <span class="ml-2 text-[9px] font-black uppercase text-slate-400">(renamed)</span>
+          ` : ''}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          onClick=${(e) => { e.stopPropagation(); renameChapterDisplay(syllabusCat, t); }}
+          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
+        >
+          Edit
+        </button>
+
+        <button
+          onClick=${(e) => { e.stopPropagation(); toggleHideChapter(syllabusCat, t); }}
+          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-3 py-2 rounded-xl border border-slate-200"
+        >
+          Hide
+        </button>
+
+        <div
+          class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
+            ${data.topics?.[`${syllabusCat}-${t}`] ? 'bg-green-500 border-green-500' : 'border-slate-200'}"
+        >
+          ${data.topics?.[`${syllabusCat}-${t}`] && html`<span class="text-white text-[10px]">✓</span>`}
+        </div>
+      </div>
+    </div>
+`)}
                 </div>
               </div>
             `}
 
-            ${activeTab === 'anki' && html`
+            ${activeTab === 'cards' && html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
-                  <h2 class="text-xl font-black">Anki Logger</h2>
+                  <h2 class="text-xl font-black">Cards Logger</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">auto-syncs to Daily Log</p>
                 </div>
 
                 <button
                   onClick=${() => {
-                    const nextAnki = [{ id: Date.now(), date: todayISO, count: 0 }, ...(data.anki || [])];
-                    setData({ ...data, anki: nextAnki });
-                    syncAnkiLogForDate(todayISO, nextAnki);
+                    const nextCards = [{ id: Date.now(), date: todayISO, count: 0 }, ...(data.cards || [])];
+                    setData({ ...data, cards: nextCards });
+                    syncCardsLogForDate(todayISO, nextCards);
                   }}
                   class="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">
                   + Log Cards
                 </button>
 
-                ${(data.anki || []).length === 0 && html`
+                ${(data.cards || []).length === 0 && html`
                   <div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">
-                    No Anki entries yet.
+                    No Cards entries yet.
                   </div>
                 `}
 
-                ${(data.anki || []).map(a => html`
+                ${(data.cards || []).map(a => html`
                   <div class="glass-card p-5 flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3">
                       <input
@@ -742,10 +815,10 @@
                         onInput=${e => {
                           const newDate = e.target.value;
                           const oldDate = a.date || todayISO;
-                          const nextAnki = (data.anki || []).map(x => x.id === a.id ? { ...x, date: newDate } : x);
-                          setData({ ...data, anki: nextAnki });
-                          syncAnkiLogForDate(oldDate, nextAnki);
-                          syncAnkiLogForDate(newDate, nextAnki);
+                          const nextCards = (data.cards || []).map(x => x.id === a.id ? { ...x, date: newDate } : x);
+                          setData({ ...data, cards: nextCards });
+                          syncCardsLogForDate(oldDate, nextCards);
+                          syncCardsLogForDate(newDate, nextCards);
                         }}
                       />
                       <input
@@ -754,15 +827,15 @@
                         value=${Number(a.count || 0)}
                         onInput=${e => {
                           const nextCount = Number(e.target.value || 0);
-                          const nextAnki = (data.anki || []).map(x => x.id === a.id ? { ...x, count: nextCount } : x);
-                          setData({ ...data, anki: nextAnki });
-                          syncAnkiLogForDate(a.date || todayISO, nextAnki);
+                          const nextCards = (data.cards || []).map(x => x.id === a.id ? { ...x, count: nextCount } : x);
+                          setData({ ...data, cards: nextCards });
+                          syncCardsLogForDate(a.date || todayISO, nextCards);
                         }}
                       />
                     </div>
 
                     <button
-                      onClick=${() => deleteAnki(a.id)}
+                      onClick=${() => deleteCards(a.id)}
                       class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">
                       Delete
                     </button>
@@ -1030,9 +1103,9 @@
                 </div>
 
                 <div class="glass-card p-6 space-y-3">
-                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Anki Logger</h3>
+                  <h3 class="text-sm font-black uppercase text-indigo-600 tracking-widest">Cards Logger</h3>
                   <ul class="text-[12px] font-bold text-slate-600 space-y-2">
-                    <li><span class="text-slate-900 font-black">Auto-log:</span> Daily Log shows “Anki: ___ cards”.</li>
+                    <li><span class="text-slate-900 font-black">Auto-log:</span> Daily Log shows “Cards: ___ cards”.</li>
                     <li><span class="text-slate-900 font-black">Auto-update:</span> editing counts updates the log instantly.</li>
                   </ul>
                 </div>
@@ -1052,7 +1125,7 @@
           <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t h-24 flex items-center px-4 z-50">
             ${[
               { key: 'home', label: 'home' },
-              { key: 'anki', label: 'anki' },
+              { key: 'cards', label: 'cards' },
               { key: 'scores', label: 'scores' },
               { key: 'acc', label: 'acc' },
               { key: 'log', label: 'log' },
@@ -1076,6 +1149,3 @@
   </script>
 </body>
 </html>
-
-
-
