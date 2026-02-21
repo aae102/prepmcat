@@ -83,6 +83,8 @@
 
     const DEFAULT_DATA = {
       topics: {}, chapterAliases: {}, hiddenChapters: {},
+      customChapters: {},   // { "Gen Chem": [{id, name}], ... }
+      deletedChapters: {},  // { "Gen Chem|||Ch 1: Atomic Structure": true }
       activeRotation: ["Biology","Psych Soc","Biochem"],
       psResource: "300 Page Doc",
       cards: [], flScores: [], accuracy: [], carsLog: [],
@@ -178,8 +180,15 @@
         if (!t) delete a[k]; else a[k] = t;
         setData({ ...data, chapterAliases: a });
       };
+      // Returns merged list: default (minus deleted) + custom, minus hidden
+      const getFullChapterList = (cat) => {
+        const base = (SYLLABUS[cat] || []).filter(ch => !data.deletedChapters?.[(cat+"|||"+ch)]);
+        const custom = (data.customChapters?.[cat] || []).map(x => x.name);
+        return [...base, ...custom];
+      };
+
       const getNextChapter = (cat) => {
-        const chs = (SYLLABUS[cat] || []).filter(ch => !isHiddenChapter(cat, ch));
+        const chs = getFullChapterList(cat).filter(ch => !isHiddenChapter(cat, ch));
         return chs.find(ch => !data.topics?.[(cat + "-" + ch)]) || "Finished! 🎉";
       };
       const handleTopicClick = (cat, ch) => {
@@ -208,15 +217,16 @@
 
       // DERIVED DATA
       const subjectProgress = useMemo(() => Object.keys(SYLLABUS).map(cat => {
-        const total = SYLLABUS[cat].length;
-        const done = SYLLABUS[cat].filter(ch => !!data.topics?.[(cat + "-" + ch)]).length;
-        return { cat, done, total, pct: Math.round((done / total) * 100) };
-      }), [data.topics]);
+        const chapters = getFullChapterList(cat);
+        const total = chapters.length;
+        const done = chapters.filter(ch => !!data.topics?.[(cat + "-" + ch)]).length;
+        return { cat, done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+      }), [data.topics, data.customChapters, data.deletedChapters]);
 
       const totalProgress = useMemo(() => {
-        const total = Object.values(SYLLABUS).reduce((s, v) => s + v.length, 0);
+        const total = subjectProgress.reduce((s, x) => s + x.total, 0);
         const done = subjectProgress.reduce((s, x) => s + x.done, 0);
-        return { done, total, pct: Math.round((done / total) * 100) };
+        return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
       }, [subjectProgress]);
 
       const streak = useMemo(() => {
@@ -254,7 +264,8 @@
         const cs = flWithComposite.map(s => s.composite).filter(c => c > 0);
         if (!cs.length) return null;
         const sorted = [...flWithComposite].sort((a, b) => new Date(b.date) - new Date(a.date));
-        return { best: Math.max(...cs), avg: Math.round(cs.reduce((a,b)=>a+b,0)/cs.length), latest: sorted[0]?.composite, trend: cs.length >= 2 ? cs[cs.length-1] - cs[0] : 0 };
+        const chronological = [...flWithComposite].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>s.composite).filter(c=>c>0);
+        return { best: Math.max(...cs), avg: Math.round(cs.reduce((a,b)=>a+b,0)/cs.length), latest: sorted[0]?.composite, trend: chronological.length >= 2 ? chronological[chronological.length-1] - chronological[0] : 0 };
       }, [flWithComposite]);
 
       const sortedScores = useMemo(() => [...(data.flScores||[])].sort((a,b)=>new Date(a.date)-new Date(b.date)), [data.flScores]);
@@ -269,9 +280,9 @@
 
       const allHiddenChapters = useMemo(() => {
         const r = [];
-        Object.keys(SYLLABUS).forEach(cat => SYLLABUS[cat].forEach(ch => { if (isHiddenChapter(cat, ch)) r.push({ cat, ch }); }));
+        Object.keys(SYLLABUS).forEach(cat => getFullChapterList(cat).forEach(ch => { if (isHiddenChapter(cat, ch)) r.push({ cat, ch }); }));
         return r;
-      }, [data.hiddenChapters]);
+      }, [data.hiddenChapters, data.customChapters, data.deletedChapters]);
 
       // CHARTS
       useEffect(() => {
@@ -409,7 +420,7 @@
                           value=${(frozen||'').trim()}
                           onChange=${e=>{const v=e.target.value;const nc={...(data.dailyChecks||{})};if(!v)delete nc[frozenKey];else nc[frozenKey]=v;setData({...data,dailyChecks:nc});}}>
                           <option value="">Auto (Next Unfinished)</option>
-                          ${(SYLLABUS[topic]||[]).map(ch=>{const done=!!data.topics?.[(topic+"-"+ch)];return html`<option value=${getChapterLabel(topic,ch)} disabled=${done}>${getChapterLabel(topic,ch)}${done?' ✓':''}</option>`;})}
+                          ${getFullChapterList(topic).map(ch=>{const done=!!data.topics?.[(topic+"-"+ch)];return html`<option value=${getChapterLabel(topic,ch)} disabled=${done}>${getChapterLabel(topic,ch)}${done?' ✓':''}</option>`;})}
                         </select>
                         <div class="mt-1 text-[10px] font-black text-slate-400">Selected: <span class="text-slate-100">${(()=>{const r=frozen||getNextChapter(topic);return r==="Finished! 🎉"?r:getChapterLabel(topic,r);})()}</span></div>
                       </div>
@@ -433,7 +444,7 @@
                     <select class="flex-1 bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-slate-100"
                       value=${data.extraPick||''} onChange=${e=>setData({...data,extraPick:e.target.value})}>
                       <option value="">Select a chapter…</option>
-                      ${Object.keys(SYLLABUS).map(cat=>html`<optgroup label=${cat}>${SYLLABUS[cat].map(ch=>html`<option value=${cat+"|||"+ch}>${cat} — ${getChapterLabel(cat, ch)}</option>`)}</optgroup>`)}
+                      ${Object.keys(SYLLABUS).map(cat=>html`<optgroup label=${cat}>${getFullChapterList(cat).map(ch=>html`<option value=${cat+"|||"+ch}>${cat} — ${getChapterLabel(cat, ch)}</option>`)}</optgroup>`)}
                     </select>
                     <button class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase"
                       onClick=${()=>{
@@ -453,10 +464,10 @@
                             <label class="flex items-center space-x-3 cursor-pointer flex-1">
                               <input type="checkbox" checked=${chk} onChange=${()=>{
                                 const nc={...(data.dailyChecks||{})},nt={...(data.topics||{})};
-                                if(!chk){nc[ck]=true;nt[hk]=nt[hk]||{date:todayISO,resource:ex.cat==='Psych Soc'?data.psResource:'Standard'};setData({...data,dailyChecks:nc,topics:nt});upsertLogItem(todayISO,{type:'extra',key:hk,label:"Extra Chapter: "+ex.cat+" — "+ex.ch});}
+                                if(!chk){nc[ck]=true;nt[hk]=nt[hk]||{date:todayISO,resource:ex.cat==='Psych Soc'?data.psResource:'Standard'};setData({...data,dailyChecks:nc,topics:nt});upsertLogItem(todayISO,{type:'extra',key:hk,label:"Extra Chapter: "+ex.cat+" — "+getChapterLabel(ex.cat,ex.ch)});}
                                 else{delete nc[ck];delete nt[hk];setData({...data,dailyChecks:nc,topics:nt});removeLogItem(todayISO,x=>x.type==='extra'&&x.key===hk);}
                               }} class="todo-check w-5 h-5 rounded-full accent-indigo-500" />
-                              <span class="text-sm font-bold text-slate-100">Extra: <span class="text-indigo-300">${ex.cat} — ${ex.ch}</span></span>
+                              <span class="text-sm font-bold text-slate-100">Extra: <span class="text-indigo-300">${ex.cat} — ${getChapterLabel(ex.cat, ex.ch)}</span></span>
                             </label>
                             <button class="text-[10px] font-black uppercase text-red-300 bg-red-900/20 px-3 py-2 rounded-xl border border-red-900/30"
                               onClick=${()=>{
@@ -542,27 +553,124 @@
 
                 <!-- CHAPTER LIST -->
                 <div class="grid grid-cols-1 gap-3 animate-slide">
-                  ${SYLLABUS[syllabusCat].filter(t=>!isHiddenChapter(syllabusCat,t)).map(t=>html`
-                    <div class="glass-card p-4 flex justify-between items-center">
+                  ${getFullChapterList(syllabusCat).filter(t=>!isHiddenChapter(syllabusCat,t)).map(t=>{
+                    const isCustom = !(SYLLABUS[syllabusCat]||[]).includes(t);
+                    return html`
+                    <div class="glass-card p-4 flex justify-between items-center ${isCustom?'border-l-4 border-l-violet-400':''}">
                       <div onClick=${()=>handleTopicClick(syllabusCat,t)} class="flex flex-col flex-1 cursor-pointer">
-                        <span class=${"text-xs font-black "+(data.topics?.[(syllabusCat+"-"+t)]?'text-green-700':'text-slate-700')}>
-                          ${getChapterLabel(syllabusCat,t)}
-                          ${data.chapterAliases?.[(syllabusCat+"|||"+t)]&&html`<span class="ml-2 text-[9px] text-slate-400">(renamed)</span>`}
-                        </span>
+                        <div class="flex items-center gap-1.5">
+                          <span class=${"text-xs font-black "+(data.topics?.[(syllabusCat+"-"+t)]?'text-green-700':'text-slate-700')}>
+                            ${getChapterLabel(syllabusCat,t)}
+                          </span>
+                          ${isCustom&&html`<span class="text-[8px] font-black uppercase bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-md">custom</span>`}
+                          ${data.chapterAliases?.[(syllabusCat+"|||"+t)]&&html`<span class="text-[9px] text-slate-400">(renamed)</span>`}
+                        </div>
                         ${data.topics?.[(syllabusCat+"-"+t)]?.date&&html`<span class="text-[9px] text-slate-400 mt-0.5">${data.topics[(syllabusCat+"-"+t)].date}</span>`}
                       </div>
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-1.5">
                         <button onClick=${(e)=>{e.stopPropagation();renameChapterDisplay(syllabusCat,t);}}
-                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-xl border border-slate-200 min-w-[36px]">Edit</button>
+                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Edit</button>
                         <button onClick=${(e)=>{e.stopPropagation();toggleHideChapter(syllabusCat,t);}}
-                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-xl border border-slate-200 min-w-[36px]">Hide</button>
+                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Hide</button>
+                        <button onClick=${(e)=>{
+                          e.stopPropagation();
+                          const msg = isCustom
+                            ? "Permanently delete custom chapter: "+t+"?"
+                            : "Permanently delete '"+t+"' from "+syllabusCat+"? (can restore via un-delete)";
+                          if(!confirm(msg)) return;
+                          if(isCustom){
+                            // remove from customChapters
+                            const nc = {...(data.customChapters||{})};
+                            nc[syllabusCat] = (nc[syllabusCat]||[]).filter(x=>x.name!==t);
+                            // clean up topic/alias
+                            const nt={...(data.topics||{})};delete nt[syllabusCat+"-"+t];
+                            const na={...(data.chapterAliases||{})};delete na[syllabusCat+"|||"+t];
+                            setData({...data,customChapters:nc,topics:nt,chapterAliases:na});
+                          } else {
+                            const nd={...(data.deletedChapters||{})};
+                            nd[syllabusCat+"|||"+t]=true;
+                            const nt={...(data.topics||{})};delete nt[syllabusCat+"-"+t];
+                            const na={...(data.chapterAliases||{})};delete na[syllabusCat+"|||"+t];
+                            setData({...data,deletedChapters:nd,topics:nt,chapterAliases:na});
+                          }
+                        }}
+                          class="text-[9px] font-black uppercase bg-red-50 text-red-500 px-2 py-1.5 rounded-xl border border-red-100">Del</button>
                         <div onClick=${()=>handleTopicClick(syllabusCat,t)}
                           class=${"w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer "+(data.topics?.[(syllabusCat+"-"+t)]?'bg-green-500 border-green-500':'border-slate-200')}>
                           ${data.topics?.[(syllabusCat+"-"+t)]&&html`<span class="text-white text-[10px]">✓</span>`}
                         </div>
                       </div>
-                    </div>`)}
+                    </div>`;
+                  })}
                 </div>
+
+                <!-- ADD CUSTOM CHAPTER -->
+                <div class="glass-card p-4 border border-violet-200 bg-violet-50/40">
+                  <p class="text-[10px] font-black uppercase text-violet-600 tracking-widest mb-3">
+                    + Add Custom Chapter to ${syllabusCat}
+                  </p>
+                  <div class="flex gap-2">
+                    <input
+                      id="custom-ch-input"
+                      type="text"
+                      placeholder="e.g. Ch 13: Extra Topic…"
+                      class="flex-1 bg-white border border-violet-200 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700 placeholder:text-slate-400"
+                      onKeyDown=${(e)=>{
+                        if(e.key==='Enter'){
+                          const val=e.target.value.trim();
+                          if(!val)return;
+                          const existing=getFullChapterList(syllabusCat);
+                          if(existing.includes(val)){alert("Chapter already exists!");return;}
+                          const nc={...(data.customChapters||{})};
+                          nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
+                          setData({...data,customChapters:nc});
+                          e.target.value='';
+                        }
+                      }}
+                    />
+                    <button
+                      class="bg-violet-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow-sm"
+                      onClick=${()=>{
+                        const inp=document.getElementById('custom-ch-input');
+                        const val=(inp?.value||'').trim();
+                        if(!val)return;
+                        const existing=getFullChapterList(syllabusCat);
+                        if(existing.includes(val)){alert("Chapter already exists!");return;}
+                        const nc={...(data.customChapters||{})};
+                        nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
+                        setData({...data,customChapters:nc});
+                        if(inp)inp.value='';
+                      }}
+                    >+ Add</button>
+                  </div>
+                </div>
+
+                <!-- DELETED CHAPTERS (restore panel) -->
+                ${Object.keys(data.deletedChapters||{}).filter(k=>k.startsWith(syllabusCat+"|||")).length>0&&html`
+                  <div class="glass-card overflow-hidden border border-rose-200">
+                    <div class="px-4 py-3 bg-rose-50 flex items-center justify-between">
+                      <span class="text-[10px] font-black uppercase text-rose-600 tracking-widest">
+                        Deleted Chapters (${syllabusCat})
+                      </span>
+                      <span class="text-[9px] font-bold text-rose-400">tap to restore</span>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                      ${Object.keys(data.deletedChapters||{}).filter(k=>k.startsWith(syllabusCat+"|||")).map(k=>{
+                        const ch=k.split("|||")[1];
+                        return html`
+                          <div class="flex items-center justify-between px-4 py-3">
+                            <span class="text-xs font-bold text-slate-600">${ch}</span>
+                            <button onClick=${()=>{
+                              const nd={...(data.deletedChapters||{})};
+                              delete nd[k];
+                              setData({...data,deletedChapters:nd});
+                            }} class="text-[9px] font-black uppercase bg-indigo-600 text-white px-3 py-1.5 rounded-xl">
+                              Restore
+                            </button>
+                          </div>`;
+                      })}
+                    </div>
+                  </div>`}
 
                 <!-- HIDDEN CHAPTERS PANEL -->
                 ${allHiddenChapters.length>0&&html`
