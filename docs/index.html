@@ -774,21 +774,6 @@
                 })}
               </div>`}
 
-                          <!-- FLASHCARDS TAB -->
-            ${activeTab==='FLASHCARD'&&html`
-              <div class="space-y-4 animate-slide">
-                <div class="flex items-end justify-between">
-                  <h2 class="text-xl font-black">Flashcards</h2>
-                  <p class="text-[10px] font-black text-slate-400 uppercase">your recall app</p>
-                </div>
-
-                <div class="glass-card overflow-hidden" style="height:85vh;">
-                <iframe src="./FLASHCARD.html"
-        style="width:100%;height:100%;border:0;">
-</iframe>
-                </div>
-              </div>`}
-
             <!-- CARDS TAB -->
             ${activeTab==='cards'&&html`
               <div class="space-y-4 animate-slide">
@@ -810,23 +795,6 @@
                     <button onClick=${()=>deleteCards(a.id)}
                       class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                   </div>`)}
-              </div>`}
-
-                          <!-- FLASHCARDS TAB -->
-            ${activeTab==='flashcards'&&html`
-              <div class="space-y-4 animate-slide">
-                <div class="flex items-end justify-between">
-                  <h2 class="text-xl font-black">Flashcards</h2>
-                  <p class="text-[10px] font-black text-slate-400 uppercase">your recall app</p>
-                </div>
-
-                <div class="glass-card overflow-hidden" style="height: 85vh;">
-                  <iframe
-                    src="./flashcards/"
-                    class="w-full h-full"
-                    style="border:0;"
-                  ></iframe>
-                </div>
               </div>`}
 
             <!-- SCORES TAB -->
@@ -1275,17 +1243,14 @@
           <!-- BOTTOM NAV -->
           <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t h-20 flex items-center px-1 z-50">
             ${[
-            
               {key:'home',label:'Home',icon:'H'},
               {key:'cars',label:'CARS',icon:'C'},
-              {key:'card',label:'Cards',icon:'🃏'},
-              {key:'flashcards',label:'Flashcards',icon:'F'},
+              {key:'cards',label:'Cards',icon:'🃏'},
               {key:'scores',label:'Scores',icon:'S'},
               {key:'acc',label:'Acc',icon:'A'},
               {key:'log',label:'Log',icon:'L'},
               {key:'ready',label:'Ready',icon:'🎯'},
               {key:'help',label:'Help',icon:'?'}
-              
             ].map(t=>html`
               <button onClick=${()=>setActiveTab(t.key)} class=${"nav-item "+(activeTab===t.key?'active':'inactive')}>
                 <div class=${"w-7 h-7 mb-0.5 rounded-lg flex items-center justify-center text-[11px] font-black "+(activeTab===t.key?'bg-indigo-600 text-white shadow-lg':'bg-slate-100 text-slate-500')}>
@@ -1299,6 +1264,5 @@
 
     render(html`<${App} />`, document.getElementById('root'));
   </script>
-  
 </body>
 </html>
