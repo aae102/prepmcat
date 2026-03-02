@@ -362,9 +362,14 @@
                 {href:"https://www.mcatofficialprep.org/",label:"AAMC",cls:"bg-emerald-50 text-emerald-700 border-emerald-200"},
                 {href:"https://www.uworld.com/app/index.html#/login/",label:"UWorld",cls:"bg-indigo-50 text-indigo-700 border-indigo-200"},
                 {href:"https://www.khanacademy.org/test-prep/mcat",label:"KA",cls:"bg-blue-50 text-blue-700 border-blue-200"},
-                {href:"https://app.gizmo.ai/",label:"Gizmo",cls:"bg-purple-50 text-purple-700 border-purple-200"}
+                
               ].map(l=>html`<a href=${l.href} target="_blank" class=${"shrink-0 text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border whitespace-nowrap "+l.cls}>${l.label}</a>`)}
             </div>
+            <div class="mt-2">
+  <button
+    onClick=${() => window.location.href = "./FLASHCARD.html"}
+    class="text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg"> RECALL </button>
+</div>
           </header>
 
           <main class="p-5 space-y-5 animate-slide">
