@@ -2303,6 +2303,7 @@ function bindStudy(){
   refresh();
 }
 
+
 /******************************************************************
  * IMPORT / EXPORT
  ******************************************************************/
@@ -2407,5 +2408,22 @@ function bindNav(){
 setInterval(handleDayRollover, 30000);
 render();
 </script>
+<div style="position:fixed; top:15px; left:15px; z-index:9999;">
+  <button 
+    onclick="window.location.href='./index.html'" 
+    style="
+      background:#6366f1;
+      color:white;
+      border:none;
+      padding:8px 14px;
+      border-radius:12px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:12px;
+      box-shadow:0 4px 10px rgba(0,0,0,0.15);
+    ">
+    ← Back to Tracker
+  </button>
+</div>
 </body>
 </html>
