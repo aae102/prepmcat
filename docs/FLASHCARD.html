@@ -900,17 +900,12 @@ function dailyProgressHTML(){
   const goal = getDailyGoal();
   const reviewed = Number(st.reviewed || 0);
   const pct = goal ? Math.min(100, Math.round((reviewed/goal)*100)) : 0;
+
   return `
     <div class="progressCard" style="margin-bottom:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div style="font-size:14px;font-weight:900">Today's Progress</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <span class="tag orange">Reviewed: ${reviewed}/${goal}</span>
-          <span class="tag green">✓ ${st.correct||0}</span>
-          <span class="tag purple">${pct}%</span>
-          <button class="btnSmall" id="resetTodayStats">Reset Today</button>
-          <button class="btnSmall" id="unmuteAllDecks">Unmute All</button>
-        </div>
+        <div class="tiny" style="color:var(--muted)">Reviewed ${reviewed} / ${goal}</div>
       </div>
       <div class="track"><div class="fill" style="width:${pct}%"></div></div>
     </div>
@@ -1569,6 +1564,9 @@ function manageHTML(){
   `;
 }
 
+// merging flag — scoped inside bindManage via closure, global var just tracks state
+let merging = false;
+
 function bindManage(){
   document.getElementById("backDash").onclick = ()=> setScreen("dashboard");
   const deckList = document.getElementById("deckList");
@@ -1576,6 +1574,10 @@ function bindManage(){
   let selected = null;
   let filter = "all";
   let editingCardId = null;
+
+  // ── Merge UI helpers (scoped here so renderPanel is accessible) ──
+  function showMergeUI(){ merging = true; editingCardId = null; renderPanel(); }
+  function hideMergeUI(){ merging = false; renderPanel(); }
 
   function renderDeckList(){
     const entries = Object.entries(DATA.decks);
@@ -1599,7 +1601,7 @@ function bindManage(){
       `;
     }).join("");
     deckList.querySelectorAll("[data-deck]").forEach(el=>{
-      el.onclick = ()=>{ selected = el.dataset.deck; editingCardId=null; renderDeckList(); renderPanel(); };
+      el.onclick = ()=>{ selected = el.dataset.deck; editingCardId=null; merging=false; renderDeckList(); renderPanel(); };
     });
     renderPanel();
   }
@@ -1641,6 +1643,7 @@ function bindManage(){
             <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
           </select>
           <button class="btnSmall" id="newCardBtn">+ Card</button>
+          <button class="btnSmall" id="mergeDeckBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">⊕ Merge</button>
           <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
         </div>
       </div>
@@ -1690,8 +1693,11 @@ function bindManage(){
       });
       selected = null;
       editingCardId = null;
+      merging = false;
     };
-    deckPanel.querySelector("#newCardBtn").onclick = ()=>{ editingCardId = "__new__"; renderPanel(); };
+    deckPanel.querySelector("#newCardBtn").onclick = ()=>{ editingCardId = "__new__"; merging = false; renderPanel(); };
+    deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
+
     deckPanel.querySelectorAll("[data-star]").forEach(btn=>{
       btn.onclick = ()=> updateData(d=>{
         const c = d.decks[selected].cards.find(x=>x.id===btn.dataset.star);
@@ -1699,7 +1705,7 @@ function bindManage(){
       });
     });
     deckPanel.querySelectorAll("[data-edit]").forEach(btn=>{
-      btn.onclick = ()=>{ editingCardId = btn.dataset.edit; renderPanel(); };
+      btn.onclick = ()=>{ editingCardId = btn.dataset.edit; merging = false; renderPanel(); };
     });
     deckPanel.querySelectorAll("[data-del]").forEach(btn=>{
       btn.onclick = ()=>{
@@ -1728,6 +1734,125 @@ function bindManage(){
     });
 
     const editBox = deckPanel.querySelector("#editBox");
+
+    // ─────────────────────────────────────────────
+    // MERGE UI
+    // ─────────────────────────────────────────────
+    if (merging){
+      const deckEntries = Object.entries(DATA.decks).filter(([id])=>id !== selected);
+      if (!deckEntries.length){
+        editBox.innerHTML = `
+          <div class="box err" style="margin-bottom:12px">
+            You need at least 2 decks to merge.
+            <div style="margin-top:10px"><button class="btnSmall" id="closeMerge">Close</button></div>
+          </div>
+        `;
+        deckPanel.querySelector("#closeMerge").onclick = hideMergeUI;
+      } else {
+        editBox.innerHTML = `
+          <div class="box" style="margin-bottom:12px;border-color:rgba(34,211,238,.25);background:rgba(34,211,238,.04)">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="font-weight:900;color:var(--cyan)">⊕ Merge Decks</div>
+              <button class="btnSmall" id="closeMerge">✕ Close</button>
+            </div>
+
+            <div class="tiny" style="margin-top:10px;color:var(--muted);font-weight:900">
+              Merge another deck <strong>into</strong> <span style="color:var(--cyan)">${escapeHTML(deck.name)}</span>
+            </div>
+
+            <div style="margin-top:14px;display:grid;gap:12px">
+              <div>
+                <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;color:var(--muted2)">Source deck (will be merged in)</div>
+                <select id="mergeSourceSel" class="input" style="padding:8px 12px;font-size:13px">
+                  ${deckEntries.map(([id,d])=>`
+                    <option value="${id}">${escapeHTML(d.name)} (${(d.cards||[]).length} cards)</option>
+                  `).join("")}
+                </select>
+              </div>
+
+              <label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;color:var(--muted)">
+                <input type="checkbox" id="mergeDedupe" checked style="accent-color:var(--purple)" />
+                <span><strong style="color:var(--text)">Deduplicate</strong> — skip cards with identical front + back</span>
+              </label>
+
+              <label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;color:var(--muted)">
+                <input type="checkbox" id="mergeDeleteSource" style="accent-color:var(--red)" />
+                <span><strong style="color:var(--text)">Delete source deck</strong> after merge</span>
+              </label>
+
+              <button class="btnPrimary" id="doMergeBtn" style="background:linear-gradient(135deg,var(--cyan),#0ea5e9);color:#0a0b0f">
+                ⊕ Merge Now
+              </button>
+
+              <div class="note">
+                Cards keep their scheduling data (interval, ease factor, next review). Incoming cards get new IDs to avoid collisions.
+              </div>
+            </div>
+          </div>
+        `;
+
+        deckPanel.querySelector("#closeMerge").onclick = hideMergeUI;
+
+        deckPanel.querySelector("#doMergeBtn").onclick = ()=>{
+          const sourceId = deckPanel.querySelector("#mergeSourceSel").value;
+          const dedupe = !!deckPanel.querySelector("#mergeDedupe").checked;
+          const delSource = !!deckPanel.querySelector("#mergeDeleteSource").checked;
+
+          if (!sourceId || !DATA.decks[sourceId]) return;
+
+          const sourceName = DATA.decks[sourceId].name;
+          const targetName = DATA.decks[selected].name;
+          if (!confirm(`Merge "${sourceName}" into "${targetName}"?\n\nThis cannot be undone.`)) return;
+
+          updateData(d=>{
+            const target = d.decks[selected];
+            const source = d.decks[sourceId];
+            if (!target || !source) return;
+
+            const targetCards = (target.cards||[]).map(c=>normalizeCard(c));
+            const sourceCards = (source.cards||[]).map(c=>normalizeCard(c));
+
+            const existingKeys = new Set(
+              dedupe
+                ? targetCards.map(c => `${(c.front||"").trim()}||${(c.back||"").trim()}`)
+                : []
+            );
+
+            const maxIdx = targetCards.reduce((m,c)=>Math.max(m, c.createdAtIdx ?? 0), -1);
+            let nextIdx = maxIdx + 1;
+
+            const incoming = [];
+            for (const sc of sourceCards){
+              const key = `${(sc.front||"").trim()}||${(sc.back||"").trim()}`;
+              if (dedupe && existingKeys.has(key)) continue;
+              existingKeys.add(key);
+
+              const clone = normalizeCard({...sc});
+              clone.id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+              clone.createdAtIdx = nextIdx++;
+              incoming.push(clone);
+            }
+
+            target.cards = [...(target.cards||[]), ...incoming];
+
+            if (delSource){
+              delete d.decks[sourceId];
+              if (selected === sourceId) selected = null;
+            }
+          });
+
+          merging = false;
+          alert(`Done! Merged cards into "${targetName}".`);
+        };
+      }
+
+      // Stop here — don't show card editor when merge UI is open
+      return;
+    }
+
+    // ─────────────────────────────────────────────
+    // CARD EDITOR
+    // ─────────────────────────────────────────────
     if (editingCardId){
       const isNew = editingCardId === "__new__";
       const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
