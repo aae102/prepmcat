@@ -17,6 +17,8 @@
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.3/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
 
   <style>
     :root{
@@ -710,20 +712,95 @@ function fileToBase64(file){
   });
 }
 async function clipboardImageToBase64(e){
-  const items = e.clipboardData?.items || [];
+  const data = e.clipboardData;
+  const items = data?.items || [];
   for (const it of items){
     if (it.type && it.type.startsWith("image/")){
-      const file = it.getAsFile();
-      if (!file) continue;
-      return await fileToBase64(file);
+      const file = it.getAsFile?.();
+      if (file) return await fileToBase64(file);
     }
+  }
+  const files = data?.files || [];
+  for (const file of files){
+    if (file?.type?.startsWith("image/")) return await fileToBase64(file);
   }
   return null;
 }
 
 /******************************************************************
+ * APKG (ANKI DECK) IMPORT
+ ******************************************************************/
+async function importAPKG(file){
+
+  const zip = await JSZip.loadAsync(file);
+
+  const fields = flds.split("\x1f").map(x => String(x ?? "").trim());
+
+// Take first non-empty as front, remaining non-empty as back
+const nonEmpty = fields.map(htmlToText).filter(Boolean);
+const front = nonEmpty[0] || "";
+const back  = nonEmpty.slice(1).join("\n") || "";
+
+  const dbFile = await zip.file("collection.anki2").async("arraybuffer");
+
+  const SQL = await initSqlJs({
+    locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
+  });
+
+  const db = new SQL.Database(new Uint8Array(dbFile));
+
+  const res = db.exec("SELECT flds FROM notes");
+
+  const cards = [];
+
+  res[0].values.forEach(row=>{
+    const fields = row[0].split("\x1f");
+
+    cards.push({
+      front: fields[0],
+      back: fields[1] || ""
+    });
+  });
+
+  return cards;
+}
+
+/******************************************************************
  * PDF + TEXT + SPREADSHEET EXTRACTION
  ******************************************************************/
+/******************************************************************
+ * APKG (ANKI) IMPORT
+ ******************************************************************/
+async function importAPKG(file){
+  const zip = await JSZip.loadAsync(file);
+
+  const dbEntry = zip.file("collection.anki2") || zip.file("collection.anki21");
+  if (!dbEntry) throw new Error("APKG missing collection.anki2");
+
+  const dbFile = await dbEntry.async("arraybuffer");
+
+  const SQL = await initSqlJs({
+    locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
+  });
+
+  const db = new SQL.Database(new Uint8Array(dbFile));
+
+  // notes.flds = "front\x1fback\x1f..."
+  const res = db.exec("SELECT flds FROM notes");
+  const cards = [];
+
+  if (!res?.[0]?.values) return cards;
+
+  for (const row of res[0].values){
+    const flds = String(row[0] ?? "");
+    const fields = flds.split("\x1f");
+    const front = (fields[0] ?? "").trim();
+    const back  = (fields[1] ?? "").trim();
+    if (front || back) cards.push({ front, back });
+  }
+  return cards;
+}
+
 async function extractLinesFromPDF(file){
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({data: arrayBuffer}).promise;
@@ -818,6 +895,12 @@ async function extractCardsFromSpreadsheet(file){
 /******************************************************************
  * RENDER + LAYOUT
  ******************************************************************/
+function htmlToText(html){
+  const div = document.createElement("div");
+  div.innerHTML = String(html || "");
+  return (div.textContent || div.innerText || "").replace(/\s+/g," ").trim();
+}
+
 function escapeHTML(s){
   return String(s||"")
     .replaceAll("&","&amp;")
@@ -1376,11 +1459,11 @@ function addHTML(){
       <div style="margin-bottom:16px">
         <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Import Method</div>
         <div class="modeRow">
-          <button class="modeBtn active" data-mode="pdf">◉ PDF Upload</button>
-          <button class="modeBtn" data-mode="excel">▦ Excel/CSV</button>
-          <button class="modeBtn" data-mode="text">✎ Paste Text</button>
-          <button class="modeBtn" data-mode="manual">⊞ Manual</button>
-        </div>
+        <button class="modeBtn active" data-mode="pdf">◉ PDF Upload</button>
+<button class="modeBtn" data-mode="excel">▦ Excel/CSV</button>
+<button class="modeBtn" data-mode="apkg">🧠 Anki (.apkg)</button>
+<button class="modeBtn" data-mode="text">✎ Paste Text</button>
+<button class="modeBtn" data-mode="manual">⊞ Manual</button>
       </div>
       <div class="box" style="margin-bottom:14px">
         <div class="tiny" style="font-weight:900;color:var(--muted);margin-bottom:8px">Deck study order</div>
@@ -1415,6 +1498,7 @@ function bindAdd(){
   const buildBtn = document.getElementById("buildBtn");
   const deckOrderSel = document.getElementById("deckOrder");
 
+
   function setMode(m){
     mode = m;
     modeButtons.forEach(b=>b.classList.toggle("active", b.dataset.mode===m));
@@ -1424,6 +1508,32 @@ function bindAdd(){
     msgArea.innerHTML = "";
     renderModeArea();
     buildBtn.textContent = (mode==="manual") ? "Create Empty Deck" : "Extract & Create Deck";
+    // ---- IMAGE PASTE SUPPORT ----
+let currentFrontImage = null;
+let currentBackImage = null;
+
+const frontInput = document.getElementById("frontInput");
+const backInput = document.getElementById("backInput");
+
+if(frontInput){
+frontInput.addEventListener("paste", async (e)=>{
+  const img = await clipboardImageToBase64(e);
+  if(img){
+    currentFrontImage = img;
+    console.log("Front image added");
+  }
+});
+}
+
+if(backInput){
+backInput.addEventListener("paste", async (e)=>{
+  const img = await clipboardImageToBase64(e);
+  if(img){
+    currentBackImage = img;
+    console.log("Back image added");
+  }
+});
+}
   }
 
   function pushMsg(kind, text){
@@ -1432,60 +1542,88 @@ function bindAdd(){
   }
 
   function renderModeArea(){
-    if (mode==="pdf"){
-      modeArea.innerHTML = `
-        <div style="margin-bottom:16px">
-          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">PDF Files</div>
-          <div class="upload" id="uploadZone">
-            <div style="font-size:30px;margin-bottom:8px">◉</div>
-            <div style="color:var(--muted);font-weight:900">Click to upload PDF(s)</div>
-          </div>
-          <input type="file" id="fileInput" accept=".pdf" multiple style="display:none" />
-          <label style="display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--muted);font-size:12px;font-weight:900">
-            <input type="checkbox" id="lineByLine" />
-            Line-by-line mode (pairs adjacent lines into cards)
-          </label>
+  if (mode==="pdf"){
+    modeArea.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">PDF Files</div>
+        <div class="upload" id="uploadZone">
+          <div style="font-size:30px;margin-bottom:8px">◉</div>
+          <div style="color:var(--muted);font-weight:900">Click to upload PDF(s)</div>
         </div>
-      `;
-      const input = document.getElementById("fileInput");
-      document.getElementById("uploadZone").onclick = ()=> input.click();
-      input.onchange = (e)=>{
-        files = [...e.target.files];
-        pushMsg("ok", `Loaded ${files.length} PDF(s): ${files.map(f=>f.name).join(", ")}`);
-      };
-      document.getElementById("lineByLine").onchange = (e)=>{ pdfLineByLine = !!e.target.checked; };
-    }
-    if (mode==="excel"){
-      modeArea.innerHTML = `
-        <div style="margin-bottom:16px">
-          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Excel / CSV</div>
-          <div class="upload" id="uploadZone">
-            <div style="font-size:30px;margin-bottom:8px">▦</div>
-            <div style="color:var(--muted);font-weight:900">Click to upload .xlsx / .csv</div>
-          </div>
-          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" />
-        </div>
-      `;
-      const input = document.getElementById("fileInput");
-      document.getElementById("uploadZone").onclick = ()=> input.click();
-      input.onchange = (e)=>{
-        files = [...e.target.files];
-        pushMsg("ok", `Loaded spreadsheet: ${files[0]?.name || "(none)"}`);
-      };
-    }
-    if (mode==="text"){
-      modeArea.innerHTML = `
-        <div style="margin-bottom:16px">
-          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Paste Content</div>
-          <textarea class="textarea" id="textArea" rows="10" placeholder="Paste Q/A pairs, term-definition lines, or tab-separated content..."></textarea>
-        </div>
-      `;
-      document.getElementById("textArea").oninput = (e)=>{ textContent = e.target.value; };
-    }
-    if (mode==="manual"){
-      modeArea.innerHTML = `<div class="box">Deck created empty — add cards in Manage.</div>`;
-    }
+        <input type="file" id="fileInput" accept=".pdf" multiple style="display:none" />
+        <label style="display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--muted);font-size:12px;font-weight:900">
+          <input type="checkbox" id="lineByLine" />
+          Line-by-line mode (pairs adjacent lines into cards)
+        </label>
+      </div>
+    `;
+    const input = document.getElementById("fileInput");
+    document.getElementById("uploadZone").onclick = ()=> input.click();
+    input.onchange = (e)=>{
+      files = [...e.target.files];
+      pushMsg("ok", `Loaded ${files.length} PDF(s): ${files.map(f=>f.name).join(", ")}`);
+    };
+    document.getElementById("lineByLine").onchange = (e)=>{ pdfLineByLine = !!e.target.checked; };
+    return;
   }
+
+  if (mode==="excel"){
+    modeArea.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Excel / CSV</div>
+        <div class="upload" id="uploadZone">
+          <div style="font-size:30px;margin-bottom:8px">▦</div>
+          <div style="color:var(--muted);font-weight:900">Click to upload .xlsx / .csv</div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" />
+      </div>
+    `;
+    const input = document.getElementById("fileInput");
+    document.getElementById("uploadZone").onclick = ()=> input.click();
+    input.onchange = (e)=>{
+      files = [...e.target.files];
+      pushMsg("ok", `Loaded spreadsheet: ${files[0]?.name || "(none)"}`);
+    };
+    return;
+  }
+
+  if (mode==="apkg"){
+    modeArea.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Anki Deck (.apkg)</div>
+        <div class="upload" id="uploadZone">
+          <div style="font-size:30px;margin-bottom:8px">🧠</div>
+          <div style="color:var(--muted);font-weight:900">Click to upload .apkg</div>
+        </div>
+        <input type="file" id="fileInput" accept=".apkg" style="display:none" />
+        <div class="note" style="margin-top:10px">Imports text fields (front/back). Media import can be added next.</div>
+      </div>
+    `;
+    const input = document.getElementById("fileInput");
+    document.getElementById("uploadZone").onclick = ()=> input.click();
+    input.onchange = (e)=>{
+      files = [...e.target.files];
+      pushMsg("ok", `Loaded APKG: ${files[0]?.name || "(none)"}`);
+    };
+    return;
+  }
+
+  if (mode==="text"){
+    modeArea.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Paste Content</div>
+        <textarea class="textarea" id="textArea" rows="10" placeholder="Paste Q/A pairs, term-definition lines, or tab-separated content..."></textarea>
+      </div>
+    `;
+    document.getElementById("textArea").oninput = (e)=>{ textContent = e.target.value; };
+    return;
+  }
+
+  if (mode==="manual"){
+    modeArea.innerHTML = `<div class="box">Deck created empty — add cards in Manage.</div>`;
+    return;
+  }
+}
 
   async function buildDeck(){
     if (busy) return;
@@ -1508,6 +1646,11 @@ function bindAdd(){
         if (!files.length) throw new Error("Upload an Excel/CSV file");
         rawCards = await extractCardsFromSpreadsheet(files[0]);
       }
+ if (mode==="apkg"){
+  if (!files.length) throw new Error("Upload an .apkg file");
+  rawCards = await importAPKG(files[0]);
+  pushMsg("ok", `APKG extracted ${rawCards.length} raw notes`);
+}
       if (mode==="text"){
         if (!textContent.trim()) throw new Error("Paste some text");
         rawCards = parseCardsFromTextSmart(textContent);
@@ -1518,7 +1661,7 @@ function bindAdd(){
       for (const c of rawCards){
         const front = (c.front||"").trim();
         const back  = (c.back||"").trim();
-        if (!front || !back) continue;
+        if (!front && !back) continue;
         const k = front+"||"+back;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -1866,14 +2009,14 @@ function bindManage(){
           <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px">
             <textarea class="textarea" id="efront" rows="2" placeholder="Front text">${escapeHTML(c.front)}</textarea>
             <div class="box" style="background:var(--panel2)">
-              <div style="font-weight:900;margin-bottom:6px">Front image</div>
-              <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, or upload.</div>
-              <div id="frontPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
-              <input type="file" id="frontFile" accept="image/*" style="margin-top:10px" />
-              <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                ${c.frontImage ? `<img class="imgThumb" src="${c.frontImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-                <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
-              </div>
+             <div style="font-weight:900;margin-bottom:6px">Front image</div>
+<div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, drag/drop, or upload.</div>
+<div id="frontPaste" class="upload" style="padding:14px" tabindex="0">Paste or drop image here</div>
+<input type="file" id="frontFile" accept="image/*" style="margin-top:10px" />
+<div id="frontPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  ${c.frontImage ? `<img class="imgThumb" src="${c.frontImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+  <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
+</div>
             </div>
             <textarea class="textarea" id="eback" rows="2" placeholder="Back text">${escapeHTML(c.back)}</textarea>
             <div class="box" style="background:var(--panel2)">
@@ -1881,7 +2024,7 @@ function bindManage(){
               <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, or upload.</div>
               <div id="backPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
               <input type="file" id="backFile" accept="image/*" style="margin-top:10px" />
-              <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <div id="backPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                 ${c.backImage ? `<img class="imgThumb" src="${c.backImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
                 <button class="btnSmall btnDanger" id="clearBackImg">Clear</button>
               </div>
@@ -1902,12 +2045,85 @@ function bindManage(){
       const backPaste = deckPanel.querySelector("#backPaste");
       let frontImg = c.frontImage || null;
       let backImg = c.backImage || null;
-      frontPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ frontImg = b64; renderPanel(); } };
-      backPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ backImg = b64; renderPanel(); } };
-      deckPanel.querySelector("#frontFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ frontImg = await fileToBase64(file); renderPanel(); } };
-      deckPanel.querySelector("#backFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ backImg = await fileToBase64(file); renderPanel(); } };
-      deckPanel.querySelector("#clearFrontImg").onclick = ()=>{ frontImg=null; renderPanel(); };
-      deckPanel.querySelector("#clearBackImg").onclick = ()=>{ backImg=null; renderPanel(); };
+      const frontPreview = deckPanel.querySelector("#frontPreview");
+const backPreview  = deckPanel.querySelector("#backPreview");
+
+function renderFrontPreview(){
+  if (!frontPreview) return;
+  frontPreview.innerHTML = `
+    ${frontImg ? `<img class="imgThumb" src="${frontImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+    <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
+  `;
+  const btn = deckPanel.querySelector("#clearFrontImg");
+  if (btn) btn.onclick = ()=>{ frontImg = null; renderFrontPreview(); };
+}
+
+function renderBackPreview(){
+  if (!backPreview) return;
+  backPreview.innerHTML = `
+    ${backImg ? `<img class="imgThumb" src="${backImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+    <button class="btnSmall btnDanger" id="clearBackImg">Clear</button>
+  `;
+  const btn = deckPanel.querySelector("#clearBackImg");
+  if (btn) btn.onclick = ()=>{ backImg = null; renderBackPreview(); };
+}
+
+// Make paste boxes reliably receive paste
+frontPaste.onclick = ()=> frontPaste.focus();
+backPaste.onclick  = ()=> backPaste.focus();
+
+frontPaste.addEventListener("paste", async (e)=>{
+  const b64 = await clipboardImageToBase64(e);
+  if (b64){
+    e.preventDefault();
+    frontImg = b64;
+    renderFrontPreview();
+  }
+});
+
+backPaste.addEventListener("paste", async (e)=>{
+  const b64 = await clipboardImageToBase64(e);
+  if (b64){
+    e.preventDefault();
+    backImg = b64;
+    renderBackPreview();
+  }
+});
+
+// Drag/drop support (optional but nice)
+[frontPaste, backPaste].forEach((el, which)=>{
+  el.addEventListener("dragover", (e)=>{ e.preventDefault(); });
+  el.addEventListener("drop", async (e)=>{
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")){
+      const b64 = await fileToBase64(file);
+      if (which === frontPaste){ frontImg = b64; renderFrontPreview(); }
+      else { backImg = b64; renderBackPreview(); }
+    }
+  });
+});
+
+// File upload handlers
+deckPanel.querySelector("#frontFile").onchange = async (e)=>{
+  const file = e.target.files?.[0];
+  if (file){
+    frontImg = await fileToBase64(file);
+    renderFrontPreview();
+  }
+};
+
+deckPanel.querySelector("#backFile").onchange = async (e)=>{
+  const file = e.target.files?.[0];
+  if (file){
+    backImg = await fileToBase64(file);
+    renderBackPreview();
+  }
+};
+
+// Initial render
+renderFrontPreview();
+renderBackPreview();
       deckPanel.querySelector("#saveCard").onclick = ()=>{
         const nf = deckPanel.querySelector("#efront").value.trim();
         const nb = deckPanel.querySelector("#eback").value.trim();
