@@ -731,51 +731,114 @@ async function clipboardImageToBase64(e){
  * APKG (ANKI DECK) IMPORT
  ******************************************************************/
 async function importAPKG(file){
-
-  const zip = await JSZip.loadAsync(file);
-
-  const fields = flds.split("\x1f").map(x => String(x ?? "").trim());
-
-// Take first non-empty as front, remaining non-empty as back
-const nonEmpty = fields.map(htmlToText).filter(Boolean);
-const front = nonEmpty[0] || "";
-const back  = nonEmpty.slice(1).join("\n") || "";
-
-  const dbFile = await zip.file("collection.anki2").async("arraybuffer");
-
-  const SQL = await initSqlJs({
-    locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
-  });
-
-  const db = new SQL.Database(new Uint8Array(dbFile));
-
-  const res = db.exec("SELECT flds FROM notes");
-
-  const cards = [];
-
-  res[0].values.forEach(row=>{
-    const fields = row[0].split("\x1f");
-
-    cards.push({
-      front: fields[0],
-      back: fields[1] || ""
-    });
-  });
-
-  return cards;
-}
-
-/******************************************************************
- * PDF + TEXT + SPREADSHEET EXTRACTION
- ******************************************************************/
-/******************************************************************
- * APKG (ANKI) IMPORT
- ******************************************************************/
-async function importAPKG(file){
   const zip = await JSZip.loadAsync(file);
 
   const dbEntry = zip.file("collection.anki2") || zip.file("collection.anki21");
-  if (!dbEntry) throw new Error("APKG missing collection.anki2");
+  if (!dbEntry) throw new Error("APKG missing collection.anki2/collection.anki21");
+
+  // ---- media map: filename -> dataURL ----
+  const mediaMap = {};
+  const mediaEntry = zip.file("media");
+  if (mediaEntry){
+    try{
+      const mediaJson = await mediaEntry.async("string");
+      const media = JSON.parse(mediaJson); // {"0":"img.png","1":"sound.mp3",...}
+      for (const key of Object.keys(media)){
+        const fname = media[key];
+        const f = zip.file(key);
+        if (!f) continue;
+
+        const ext = (fname.split(".").pop() || "").toLowerCase();
+        const isImg = ["png","jpg","jpeg","webp","gif","svg"].includes(ext);
+        if (!isImg) continue;
+
+        const base64 = await f.async("base64");
+        const mime =
+          ext==="png" ? "image/png" :
+          (ext==="jpg"||ext==="jpeg") ? "image/jpeg" :
+          ext==="webp" ? "image/webp" :
+          ext==="gif" ? "image/gif" :
+          ext==="svg" ? "image/svg+xml" :
+          "application/octet-stream";
+
+        mediaMap[fname] = `data:${mime};base64,${base64}`;
+mediaMap[encodeURIComponent(fname)] = mediaMap[fname];
+      }
+    }catch(e){
+      console.warn("Media parse failed:", e);
+    }
+  }
+
+  function guessMime(filename){
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "gif") return "image/gif";
+  if (ext === "webp") return "image/webp";
+  if (ext === "svg") return "image/svg+xml";
+  return "application/octet-stream";
+}
+
+function arrayBufferToBase64(buf){
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  for (let i=0; i<bytes.length; i+=chunkSize){
+    binary += String.fromCharCode(...bytes.subarray(i, i+chunkSize));
+  }
+  return btoa(binary);
+}
+
+// Replace <img src="filename"> and <source src="filename"> with data URLs if we have them.
+// Also strips [sound:...] so it doesn't show as text.
+function injectApkgMedia(html, mediaMap){
+  let s = String(html || "");
+
+  // remove Anki sound tags from display
+  s = s.replace(/\[sound:[^\]]+\]/gi, "");
+
+  // rewrite src="..." for non-http / non-data
+  return s.replace(/src\s*=\s*"(.*?)"/gi, (m, src)=>{
+    const clean = src.trim();
+    if (!clean) return m;
+    if (/^(https?:|data:|blob:)/i.test(clean)) return m;
+
+    // Anki sometimes uses URL-encoded filenames
+    const decoded = decodeURIComponent(clean);
+
+    const dataUrl = mediaMap.get(decoded) || mediaMap.get(clean);
+    if (!dataUrl) return m;
+
+    return `src="${dataUrl}"`;
+  });
+}
+
+function resolveMedia(html){
+  let out = String(html || "");
+
+  out = out.replace(/src\s*=\s*["']([^"']+)["']/gi, (m, src)=>{
+    let clean = String(src || "").trim();
+
+    // ignore already-resolved URLs
+    if (/^(https?:|data:|blob:)/i.test(clean)) return m;
+
+    // remove ./ and any query/hash junk
+    clean = clean.replace(/^\.\/+/, "").split("#")[0].split("?")[0].trim();
+
+    // try both raw + decoded (APKG often uses %20 etc)
+    let decoded = clean;
+    try { decoded = decodeURIComponent(clean); } catch {}
+
+    const dataUrl = mediaMap[decoded] || mediaMap[clean];
+    if (dataUrl) return `src="${dataUrl}"`;
+
+    return m;
+  });
+
+  // remove [sound:...] tokens so they don't appear as text
+  out = out.replace(/\[sound:[^\]]+\]/gi, "");
+  return out;
+}
 
   const dbFile = await dbEntry.async("arraybuffer");
 
@@ -785,7 +848,6 @@ async function importAPKG(file){
 
   const db = new SQL.Database(new Uint8Array(dbFile));
 
-  // notes.flds = "front\x1fback\x1f..."
   const res = db.exec("SELECT flds FROM notes");
   const cards = [];
 
@@ -794,10 +856,14 @@ async function importAPKG(file){
   for (const row of res[0].values){
     const flds = String(row[0] ?? "");
     const fields = flds.split("\x1f");
-    const front = (fields[0] ?? "").trim();
-    const back  = (fields[1] ?? "").trim();
+
+    // IMPORTANT: keep HTML in these fields
+    const front = resolveMedia((fields[0] ?? "").trim());
+    const back  = resolveMedia((fields[1] ?? "").trim());
+
     if (front || back) cards.push({ front, back });
   }
+
   return cards;
 }
 
@@ -899,6 +965,34 @@ function htmlToText(html){
   const div = document.createElement("div");
   div.innerHTML = String(html || "");
   return (div.textContent || div.innerText || "").replace(/\s+/g," ").trim();
+}
+
+function normalizeCardHTML(html){
+  // ensure consistent <br> for newlines
+  return String(html || "").replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
+}
+
+function safeHTML(html){
+  // Lightweight sanitizer (good enough for your offline decks)
+  const tpl = document.createElement("template");
+  tpl.innerHTML = String(html || "");
+
+  // Remove dangerous tags
+  tpl.content.querySelectorAll("script, style, iframe, object, embed").forEach(n => n.remove());
+
+  // Remove inline event handlers + javascript: URLs
+  tpl.content.querySelectorAll("*").forEach(el => {
+    [...el.attributes].forEach(attr => {
+      const name = attr.name.toLowerCase();
+      const val  = String(attr.value || "");
+      if (name.startsWith("on")) el.removeAttribute(attr.name);
+      if ((name === "href" || name === "src") && val.trim().toLowerCase().startsWith("javascript:")) {
+        el.removeAttribute(attr.name);
+      }
+    });
+  });
+
+  return tpl.innerHTML;
 }
 
 function escapeHTML(s){
@@ -1217,8 +1311,8 @@ function customHTML(){
           <label class="customCard ${isSel?'selected':''}" data-label-id="${c.id}">
             <input type="checkbox" data-cid="${c.id}" ${isSel?'checked':''} />
             <div style="flex:1;min-width:0">
-              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(c.front)}</div>
-              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(c.back)}</div>
+              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(htmlToText(c.front))}</div>
+              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(htmlToText(c.back))}</div>
               <div class="tiny" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
                 ${c.mastered?`<span style="color:var(--green);font-weight:900">★ mastered</span>`:''}
                 ${(c.seenCount||0)===0?`<span style="color:var(--orange);font-weight:900">unseen</span>`:`<span style="color:var(--cyan)">seen ×${c.seenCount}</span>`}
@@ -1800,8 +1894,8 @@ function bindManage(){
           <div class="rowCard">
             <div class="mono" style="color:var(--muted2);font-size:11px;width:30px;flex-shrink:0">${i+1}</div>
             <div style="flex:1;min-width:0">
-              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(c.front)}</div>
-              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(c.back)}</div>
+              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(htmlToText(c.front))}</div>
+              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(htmlToText(c.back))}</div>
               <div class="tiny" style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
                 ${(c.frontImage)?`<span>🖼 front</span>`:""}
                 ${(c.backImage)?`<span>🖼 back</span>`:""}
@@ -2007,7 +2101,7 @@ function bindManage(){
             <button class="btnSmall" id="closeEdit">Close</button>
           </div>
           <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px">
-            <textarea class="textarea" id="efront" rows="2" placeholder="Front text">${escapeHTML(c.front)}</textarea>
+            <textarea class="textarea" id="efront" rows="2" placeholder="Front text">${escapeHTML(htmlToText(c.front))}</textarea>
             <div class="box" style="background:var(--panel2)">
              <div style="font-weight:900;margin-bottom:6px">Front image</div>
 <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, drag/drop, or upload.</div>
@@ -2018,7 +2112,7 @@ function bindManage(){
   <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
 </div>
             </div>
-            <textarea class="textarea" id="eback" rows="2" placeholder="Back text">${escapeHTML(c.back)}</textarea>
+            <textarea class="textarea" id="eback" rows="2" placeholder="Back text">${escapeHTML(htmlToText(c.back))}</textarea>
             <div class="box" style="background:var(--panel2)">
               <div style="font-weight:900;margin-bottom:6px">Back image</div>
               <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, or upload.</div>
@@ -2437,12 +2531,12 @@ function bindStudy(){
     if (card.frontImage){ frontImg.src = card.frontImage; frontImg.style.display="block"; }
     else frontImg.style.display="none";
 
-    if (mode === "cloze"){
-      const cl = makeCloze(card.back);
-      qtext.textContent = cl.clozeText;
-    } else {
-      qtext.textContent = card.front;
-    }
+ if (mode === "cloze"){
+  const cl = makeCloze(htmlToText(card.back));
+  qtext.textContent = cl.clozeText;
+} else {
+  qtext.innerHTML = safeHTML(normalizeCardHTML(card.front));
+}
 
     if (mode === "mc" && st.phase === "question"){
       typedPane.style.display = "none";
@@ -2490,7 +2584,7 @@ function bindStudy(){
       const you = (mode==="mc") ? (st.mcPicked||"") : (st.input || (st.revealedBySpace?"(revealed)":""));
       youAns.textContent = you;
       youAns.style.color = (st.result==="wrong") ? "var(--red)" : "var(--text)";
-      trueAns.textContent = card.back;
+      trueAns.innerHTML = safeHTML(normalizeCardHTML(card.back));
       if (card.backImage){ backImg.src = card.backImage; backImg.style.display="block"; }
       else backImg.style.display="none";
     }
@@ -2517,7 +2611,8 @@ function bindStudy(){
     const input = ansInput.value.trim();
     if (!input) return;
     st.input = input;
-    const ans = (mode === "cloze") ? makeCloze(card.back).answer : card.back;
+    const ansText = htmlToText(card.back);
+const ans = (mode === "cloze") ? makeCloze(ansText).answer : ansText;
     st.result = checkAnswer(input, ans);
     st.phase = "revealed";
     refresh();
