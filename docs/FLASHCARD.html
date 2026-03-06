@@ -254,15 +254,17 @@ const DEFAULT_DAILY_GOAL = 150;
 const INIT = {
   decks:{},
   stats:{},
-  settings:{
-    appStartDate:null,
-    mutedDecksByDay:{},
-    dailyGoal: DEFAULT_DAILY_GOAL,
-    studyMode: "mixed_random",
-    strictness: "balanced",
-    masteredReviewPerDay: 15,
-    masteredHandling: "mix"
-  }
+ settings:{
+  appStartDate:null,
+  mutedDecksByDay:{},
+  dailyGoal: DEFAULT_DAILY_GOAL,
+  studyMode: "mixed_random",
+  strictness: "balanced",
+  masteredReviewPerDay: 15,
+  masteredHandling: "mix",
+  perDeckNewQuota: {},
+  perDeckReviewQuota: {}
+}
 };
 
 let DATA = loadData();
@@ -354,20 +356,8 @@ function normalizeData(d){
   if (!d.settings.strictness) d.settings.strictness = "balanced";
   if (d.settings.masteredReviewPerDay == null) d.settings.masteredReviewPerDay = 15;
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
-if (!d.settings.perDeckNewQuota) d.settings.perDeckNewQuota = {};
-for (const [deckId, deck] of Object.entries(d.decks || {})) {
-  if (d.settings.perDeckNewQuota[deckId] != null) continue;
-
-  const name = (deck.name || "").toLowerCase();
-
-  if (name.includes("bio") && !name.includes("biochem")) d.settings.perDeckNewQuota[deckId] = 70;
-  else if (name.includes("biochem")) d.settings.perDeckNewQuota[deckId] = 65;
-  else if (name.includes("psych")) d.settings.perDeckNewQuota[deckId] = 40;
-  else if (name.includes("physics")) d.settings.perDeckNewQuota[deckId] = 20;
-  else if (name.includes("orgo")) d.settings.perDeckNewQuota[deckId] = 25;
-  else if (name.includes("chem")) d.settings.perDeckNewQuota[deckId] = 25;
-}
-  
+  if (!d.settings.perDeckNewQuota) d.settings.perDeckNewQuota = {};
+  if (!d.settings.perDeckReviewQuota) d.settings.perDeckReviewQuota = {};
   if (!d.decks) d.decks = {};
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
@@ -639,10 +629,17 @@ function buildDailyQueue(decks, limit){
     const unseen   = cards.filter(c=>!c.mastered && !c.inWrongDeck && (c.seenCount||0)===0);
     const mastered = cards.filter(c=>isMasteredDue(c));
 
-    wrongByDeck[id]    = deckOrderCards(deck, wrong);
-    dueByDeck[id]      = deckOrderCards(deck, due);
-    unseenByDeck[id]   = deckOrderCards(deck, unseen);
-    masteredByDeck[id] = deckOrderCards(deck, mastered);
+   const reviewQuotas = DATA.settings?.perDeckReviewQuota || {};
+
+wrongByDeck[id] = deckOrderCards(deck, wrong);
+
+// due review cap per deck
+const dueOrdered = deckOrderCards(deck, due);
+const dueCap = Number(reviewQuotas[id] ?? dueOrdered.length);
+dueByDeck[id] = dueOrdered.slice(0, Math.max(0, dueCap));
+
+unseenByDeck[id]   = deckOrderCards(deck, unseen);
+masteredByDeck[id] = deckOrderCards(deck, mastered);
   }
 
   const wrongQueue   = interleaveBuckets(wrongByDeck);
@@ -1641,6 +1638,33 @@ let currentBackImage = null;
 
 const frontInput = document.getElementById("frontInput");
 const backInput = document.getElementById("backInput");
+
+const d = JSON.parse(localStorage.getItem("recall_full_final_v1"));
+
+d.settings.perDeckNewQuota = {
+  "deck_1772132209749": 45, // BIOCHEM (milesdown)
+  "deck_1772132243106": 35, // BIO (milesdown)
+  "deck_1772341254761": 15, // PHYSICS (acethemcat)
+  "deck_1772514760530": 25, // PSYCH (sketchy)
+  "deck_1772518766983": 5,  // Glycolysis
+  "deck_1772645510900": 15, // ORGO (sketchy)
+  "deck_1772647833828": 10, // GEN CHEM
+  "deck_1772756225128": 0   // Error Deck! (uWorld)
+};
+
+d.settings.perDeckReviewQuota = {
+  "deck_1772132209749": 25,  // BIOCHEM
+  "deck_1772132243106": 20,  // BIO
+  "deck_1772341254761": 10,  // PHYSICS
+  "deck_1772514760530": 15,  // PSYCH
+  "deck_1772518766983": 5,   // Glycolysis
+  "deck_1772645510900": 10,  // ORGO
+  "deck_1772647833828": 10,  // GEN CHEM
+  "deck_1772756225128": 999  // Error Deck stays effectively uncapped
+};
+
+localStorage.setItem("recall_full_final_v1", JSON.stringify(d));
+location.reload();
 
 if(frontInput){
 frontInput.addEventListener("paste", async (e)=>{
