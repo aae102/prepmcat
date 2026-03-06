@@ -346,7 +346,7 @@ function todayStr(){ return localDateStr(new Date()); }
 function nowMs(){ return Date.now(); }
 
 function normalizeData(d){
-  if (!d.settings) d.settings = structuredClone(INIT.settings);
+  if (!d.settings) d.settings = structuredClone(INIT.settings); 
   if (!d.settings.appStartDate) d.settings.appStartDate = todayStr();
   if (!d.settings.mutedDecksByDay) d.settings.mutedDecksByDay = {};
   if (!d.settings.dailyGoal) d.settings.dailyGoal = DEFAULT_DAILY_GOAL;
@@ -354,6 +354,20 @@ function normalizeData(d){
   if (!d.settings.strictness) d.settings.strictness = "balanced";
   if (d.settings.masteredReviewPerDay == null) d.settings.masteredReviewPerDay = 15;
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
+if (!d.settings.perDeckNewQuota) d.settings.perDeckNewQuota = {};
+for (const [deckId, deck] of Object.entries(d.decks || {})) {
+  if (d.settings.perDeckNewQuota[deckId] != null) continue;
+
+  const name = (deck.name || "").toLowerCase();
+
+  if (name.includes("bio") && !name.includes("biochem")) d.settings.perDeckNewQuota[deckId] = 70;
+  else if (name.includes("biochem")) d.settings.perDeckNewQuota[deckId] = 65;
+  else if (name.includes("psych")) d.settings.perDeckNewQuota[deckId] = 40;
+  else if (name.includes("physics")) d.settings.perDeckNewQuota[deckId] = 20;
+  else if (name.includes("orgo")) d.settings.perDeckNewQuota[deckId] = 25;
+  else if (name.includes("chem")) d.settings.perDeckNewQuota[deckId] = 25;
+}
+  
   if (!d.decks) d.decks = {};
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
@@ -635,25 +649,44 @@ function buildDailyQueue(decks, limit){
   const dueQueue     = interleaveBuckets(dueByDeck);
   const masteredCap   = getMasteredReviewPerDay();
   const masteredQueue = interleaveBuckets(masteredByDeck).slice(0, masteredCap);
-  const newSlots      = Math.max(0, limit - wrongQueue.length - dueQueue.length - masteredQueue.length);
-  const cappedByDeck  = {};
+ const newSlots = Math.max(0, limit - wrongQueue.length - dueQueue.length - masteredQueue.length);
+const cappedByDeck = {};
+let remaining = newSlots;
 
-  if (newSlots > 0){
-    const activeIds = Object.keys(unseenByDeck).filter(id => unseenByDeck[id].length > 0);
-    let remaining   = newSlots;
-    let pool        = [...activeIds];
-    for (let pass = 0; pass < 5 && pool.length > 0 && remaining > 0; pass++){
-      const perDeck = Math.ceil(remaining / pool.length);
-      const nextPool = [];
-      for (const id of pool){
-        const give = Math.min(perDeck, unseenByDeck[id].length, remaining);
-        cappedByDeck[id] = (cappedByDeck[id] || 0) + give;
-        remaining -= give;
-        if (unseenByDeck[id].length > cappedByDeck[id]) nextPool.push(id);
-      }
-      pool = nextPool;
+// 1) Quota pass (use user-specified quotas first)
+if (remaining > 0){
+  const quotas = DATA.settings?.perDeckNewQuota || {};
+  for (const deckId of Object.keys(unseenByDeck)){
+    if (remaining <= 0) break;
+    const q = Number(quotas[deckId] ?? 0);
+    if (!q) continue;
+    const give = Math.min(q, unseenByDeck[deckId].length, remaining);
+    if (give > 0){
+      cappedByDeck[deckId] = (cappedByDeck[deckId] || 0) + give;
+      remaining -= give;
     }
   }
+}
+
+// 2) Fill remainder fairly across any decks still having unseen cards
+if (remaining > 0){
+  const activeIds = Object.keys(unseenByDeck).filter(id => unseenByDeck[id].length > (cappedByDeck[id] || 0));
+  let pool = [...activeIds];
+  for (let pass = 0; pass < 6 && pool.length > 0 && remaining > 0; pass++){
+    const perDeck = Math.ceil(remaining / pool.length);
+    const nextPool = [];
+    for (const id of pool){
+      const have = unseenByDeck[id].length - (cappedByDeck[id] || 0);
+      if (have <= 0) continue;
+      const give = Math.min(perDeck, have, remaining);
+      cappedByDeck[id] = (cappedByDeck[id] || 0) + give;
+      remaining -= give;
+      if (unseenByDeck[id].length > (cappedByDeck[id] || 0)) nextPool.push(id);
+      if (remaining <= 0) break;
+    }
+    pool = nextPool;
+  }
+}
 
   const slicedByDeck = {};
   for (const [id, count] of Object.entries(cappedByDeck)){
