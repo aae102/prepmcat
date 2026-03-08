@@ -277,9 +277,14 @@
  * STORAGE + SETTINGS
  ******************************************************************/
 const STORAGE_KEY = "recall_full_final_v1";
+const BACKUP_KEY = STORAGE_KEY + "_backup";
+const LAST_SAVED_KEY = STORAGE_KEY + "_lastSavedAt";
 const DEFAULT_DAILY_GOAL = 150;
 
+const DATA_VERSION = 1;
+
 const INIT = {
+  version: DATA_VERSION,
   decks:{},
   stats:{},
  settings:{
@@ -308,14 +313,37 @@ let CUSTOM_SHUFFLE       = true;
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : structuredClone(INIT);
+    if (!raw) return normalizeData(structuredClone(INIT));
+
+    const parsed = JSON.parse(raw);
     return normalizeData(parsed);
-  }catch{
+  }catch(err){
+    console.error("Primary data load failed:", err);
+
+    try{
+      const backupRaw = localStorage.getItem(BACKUP_KEY);
+      if (backupRaw){
+        const backupParsed = JSON.parse(backupRaw);
+        return normalizeData(backupParsed);
+      }
+    }catch(backupErr){
+      console.error("Backup load failed:", backupErr);
+    }
+
     return normalizeData(structuredClone(INIT));
   }
 }
 function saveData(d){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }catch{}
+  try{
+  const existing = localStorage.getItem(STORAGE_KEY);
+if (existing) {
+  localStorage.setItem(BACKUP_KEY, existing);
+}
+localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
+  }catch(err){
+    console.error("Save failed:", err);
+  }
 }
 function updateData(mutator){
   const next = structuredClone(DATA);
@@ -376,7 +404,11 @@ function todayStr(){ return localDateStr(new Date()); }
 function nowMs(){ return Date.now(); }
 
 function normalizeData(d){
-  if (!d.settings) d.settings = structuredClone(INIT.settings); 
+  if (!d || typeof d !== "object") d = structuredClone(INIT);
+
+  if (!d.version) d.version = DATA_VERSION;
+
+  if (!d.settings) d.settings = structuredClone(INIT.settings);
   if (!d.settings.appStartDate) d.settings.appStartDate = todayStr();
   if (!d.settings.mutedDecksByDay) d.settings.mutedDecksByDay = {};
   if (!d.settings.dailyGoal) d.settings.dailyGoal = DEFAULT_DAILY_GOAL;
@@ -386,11 +418,16 @@ function normalizeData(d){
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
   if (!d.settings.perDeckNewQuota) d.settings.perDeckNewQuota = {};
   if (!d.settings.perDeckReviewQuota) d.settings.perDeckReviewQuota = {};
-  if (!d.decks) d.decks = {};
+
+  if (!d.decks || typeof d.decks !== "object") d.decks = {};
+  if (!d.stats || typeof d.stats !== "object") d.stats = {};
+
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
-    deck.cards = (deck.cards||[]).map(c=>normalizeCard(c));
+    if (!Array.isArray(deck.cards)) deck.cards = [];
+    deck.cards = deck.cards.map(c=>normalizeCard(c));
   }
+
   return d;
 }
 
@@ -1155,14 +1192,15 @@ function sidebarHTML(){
         <button class="btnSmall" id="saveMasteredGoal">Set</button>
       </div>
       <button class="btnSmall btnDanger" id="resetAllBtn" style="margin-top:8px">⚠ Reset All</button>
-      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px">
-        <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Backup</div>
-        <button class="btnSmall" id="exportBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">↓ Export JSON</button>
-        <label class="btnSmall" style="display:block;text-align:center;cursor:pointer;color:var(--purple);border-color:rgba(129,140,248,.3)">
-          ↑ Import JSON
-          <input type="file" id="importFile" accept=".json" style="display:none" />
-        </label>
-      </div>
+   <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px">
+  <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Backup</div>
+  <button class="btnSmall" id="exportBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">↓ Export JSON</button>
+  <button class="btnSmall" id="restoreBackupBtn" style="color:var(--orange);border-color:rgba(251,146,60,.25)">↺ Restore Last Backup</button>
+  <label class="btnSmall" style="display:block;text-align:center;cursor:pointer;color:var(--purple);border-color:rgba(129,140,248,.3)">
+    ↑ Import JSON
+    <input type="file" id="importFile" accept=".json" style="display:none" />
+  </label>
+</div>
     </div>
   `;
 }
@@ -3110,10 +3148,17 @@ function importData(file){
             d.stats[day].wrong    = Math.max(d.stats[day].wrong||0,    st.wrong||0);
           }
         }
-        if (parsed.settings?.appStartDate){
-          const cur = d.settings.appStartDate || todayStr();
-          d.settings.appStartDate = parsed.settings.appStartDate < cur ? parsed.settings.appStartDate : cur;
-        }
+      if (parsed.settings){
+  d.settings = {
+    ...d.settings,
+    ...parsed.settings,
+    appStartDate: parsed.settings.appStartDate
+      ? ((d.settings.appStartDate && d.settings.appStartDate < parsed.settings.appStartDate)
+          ? d.settings.appStartDate
+          : parsed.settings.appStartDate)
+      : d.settings.appStartDate
+  };
+}
       });
       alert("Import successful! Your data has been merged.");
     }catch(err){
@@ -3134,11 +3179,33 @@ function bindNav(){
   const resetAllBtn = document.getElementById("resetAllBtn");
   if (resetAllBtn) resetAllBtn.onclick = hardResetAll;
 
-  const exportBtn = document.getElementById("exportBtn");
-  if (exportBtn) exportBtn.onclick = exportData;
+const exportBtn = document.getElementById("exportBtn");
+if (exportBtn) exportBtn.onclick = exportData;
 
-  const importFile = document.getElementById("importFile");
-  if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.target.value=""; };
+const restoreBackupBtn = document.getElementById("restoreBackupBtn");
+if (restoreBackupBtn){
+  restoreBackupBtn.onclick = ()=>{
+    const backupRaw = localStorage.getItem(BACKUP_KEY);
+    if (!backupRaw){
+      alert("No backup found.");
+      return;
+    }
+    if (!confirm("Restore the last local backup? This will replace the current in-browser data.")) return;
+
+    try{
+      const parsed = JSON.parse(backupRaw);
+      DATA = normalizeData(parsed);
+      saveData(DATA);
+      render();
+      alert("Backup restored.");
+    }catch(err){
+      alert("Backup restore failed: " + err.message);
+    }
+  };
+}
+
+const importFile = document.getElementById("importFile");
+if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.target.value=""; };
 
   const modeSel = document.getElementById("studyModeSel");
   if (modeSel) modeSel.onchange = ()=> updateData(d=>{ d.settings.studyMode = modeSel.value; });
