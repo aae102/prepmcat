@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>MCAT TRACKER | Ultimate Pro</title>
- <title>MCAT TRACKER | Ultimate Pro</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -23,12 +22,16 @@
     .custom-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
     .custom-scroll::-webkit-scrollbar { display: none; }
     @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes popIn { from { transform: scale(0.92) translateY(6px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
     .animate-slide { animation: slideIn 0.25s ease-out; }
+    .animate-pop { animation: popIn 0.2s cubic-bezier(.34,1.56,.64,1); }
     .progress-bar { transition: width 0.6s ease; }
     .heat-0 { background: #e2e8f0; }
     .heat-1 { background: #c7d2fe; }
     .heat-2 { background: #818cf8; }
     .heat-3 { background: #4f46e5; }
+    .backup-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 200; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 88px; }
+    .backup-panel { background: white; border-radius: 24px; padding: 24px; width: calc(100% - 40px); max-width: 400px; box-shadow: 0 25px 60px -12px rgba(0,0,0,0.35); border: 1px solid #e2e8f0; }
   </style>
 </head>
 <body class="pb-24">
@@ -76,24 +79,22 @@
     const CARS_SOURCES = ["Jack Westin","AAMC QPack","AAMC Section Bank","Blueprint","Kaplan","Princeton Review","Bootcamp","Other"];
 
     const SUBJ_COLORS = {
-      "Gen Chem":  { bar: "#3b82f6", bg: "bg-blue-500" },
-      "Orgo":      { bar: "#a855f7", bg: "bg-purple-500" },
-      "Physics":   { bar: "#f97316", bg: "bg-orange-500" },
-      "Biology":   { bar: "#22c55e", bg: "bg-green-500" },
-      "Biochem":   { bar: "#14b8a6", bg: "bg-teal-500" },
-      "Psych Soc": { bar: "#ec4899", bg: "bg-pink-500" }
+      "Gen Chem":  { bar: "#3b82f6" },
+      "Orgo":      { bar: "#a855f7" },
+      "Physics":   { bar: "#f97316" },
+      "Biology":   { bar: "#22c55e" },
+      "Biochem":   { bar: "#14b8a6" },
+      "Psych Soc": { bar: "#ec4899" }
     };
 
     const DEFAULT_DATA = {
       topics: {}, chapterAliases: {}, hiddenChapters: {},
-      customChapters: {},
-      deletedChapters: {},
+      customChapters: {}, deletedChapters: {},
       activeRotation: ["Biology","Psych Soc","Biochem"],
       psResource: "300 Page Doc",
       cards: [], flScores: [], accuracy: [], carsLog: [],
       dailyChecks: {}, dailyExtras: {}, dailyLog: {},
-      extraPick: "",
-      blueprintDiagnostic: null
+      extraPick: "", blueprintDiagnostic: null
     };
 
     const App = () => {
@@ -106,16 +107,48 @@
       const [hasLoaded, setHasLoaded] = useState(false);
       const [isSyncing, setIsSyncing] = useState(false);
       const [authError, setAuthError] = useState('');
-
+      const [showBackup, setShowBackup] = useState(false);
+      const [importStatus, setImportStatus] = useState('');
+      const importInputRef = useRef(null);
       const saveTimer = useRef(null);
       const chartRef = useRef(null);
       const chartInstance = useRef(null);
       const carsChartRef = useRef(null);
       const carsChartInstance = useRef(null);
 
+      const exportJSON = () => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'mcat-backup-' + todayISO + '.json'; a.click();
+        URL.revokeObjectURL(url);
+        setImportStatus('✅ Exported!');
+        setTimeout(() => setImportStatus(''), 2500);
+      };
+
+      const importJSON = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Bad format');
+            setData({ ...DEFAULT_DATA, ...parsed });
+            setImportStatus('✅ Restored! Data loaded.');
+            setTimeout(() => { setImportStatus(''); setShowBackup(false); }, 2000);
+          } catch(_) {
+            setImportStatus('❌ Invalid file — not a valid backup.');
+            setTimeout(() => setImportStatus(''), 3000);
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      };
+
       const handleAuth = async (e, mode) => {
         e.preventDefault(); setAuthError('');
-        const form = e.currentTarget?.tagName === 'FORM' ? e.currentTarget : e.currentTarget?.closest('form');
+        const form = e.currentTarget && e.currentTarget.tagName === 'FORM' ? e.currentTarget : e.currentTarget && e.currentTarget.closest('form');
         try {
           if (mode === 'login') await signInWithEmailAndPassword(auth, form.elements.email.value.trim(), form.elements.password.value);
           else await createUserWithEmailAndPassword(auth, form.elements.email.value.trim(), form.elements.password.value);
@@ -151,7 +184,7 @@
 
       const upsertLogItem = (date, item) => {
         setData(prev => {
-          const arr = (prev.dailyLog?.[date] || []).filter(x => !(x.type === item.type && x.key === item.key));
+          const arr = (prev.dailyLog && prev.dailyLog[date] ? prev.dailyLog[date] : []).filter(x => !(x.type === item.type && x.key === item.key));
           arr.unshift({ id: Date.now(), ...item });
           return { ...prev, dailyLog: { ...(prev.dailyLog || {}), [date]: arr } };
         });
@@ -159,20 +192,20 @@
       const removeLogItem = (date, matcher) => {
         setData(prev => ({
           ...prev,
-          dailyLog: { ...(prev.dailyLog || {}), [date]: (prev.dailyLog?.[date] || []).filter(x => !matcher(x)) }
+          dailyLog: { ...(prev.dailyLog || {}), [date]: (prev.dailyLog && prev.dailyLog[date] ? prev.dailyLog[date] : []).filter(x => !matcher(x)) }
         }));
       };
 
-      const chapterKey = (cat, ch) => `${cat}|||${ch}`;
-      const getChapterLabel = (cat, ch) => { const a = data.chapterAliases?.[chapterKey(cat, ch)]; return (a && String(a).trim()) ? a : ch; };
-      const isHiddenChapter = (cat, ch) => !!data.hiddenChapters?.[chapterKey(cat, ch)];
+      const chapterKey = (cat, ch) => cat + '|||' + ch;
+      const getChapterLabel = (cat, ch) => { const a = data.chapterAliases && data.chapterAliases[chapterKey(cat, ch)]; return (a && String(a).trim()) ? a : ch; };
+      const isHiddenChapter = (cat, ch) => !!(data.hiddenChapters && data.hiddenChapters[chapterKey(cat, ch)]);
       const toggleHideChapter = (cat, ch) => {
         const k = chapterKey(cat, ch); const h = { ...(data.hiddenChapters || {}) };
         if (h[k]) delete h[k]; else h[k] = true;
         setData({ ...data, hiddenChapters: h });
       };
       const renameChapterDisplay = (cat, ch) => {
-        const k = chapterKey(cat, ch); const cur = data.chapterAliases?.[k] || "";
+        const k = chapterKey(cat, ch); const cur = (data.chapterAliases && data.chapterAliases[k]) || "";
         const next = prompt("Rename: " + cat + " — " + ch + "\n(blank to reset)", cur);
         if (next === null) return;
         const a = { ...(data.chapterAliases || {}) }; const t = String(next).trim();
@@ -180,14 +213,13 @@
         setData({ ...data, chapterAliases: a });
       };
       const getFullChapterList = (cat) => {
-        const base = (SYLLABUS[cat] || []).filter(ch => !data.deletedChapters?.[(cat+"|||"+ch)]);
-        const custom = (data.customChapters?.[cat] || []).map(x => x.name);
+        const base = (SYLLABUS[cat] || []).filter(ch => !(data.deletedChapters && data.deletedChapters[cat+"|||"+ch]));
+        const custom = ((data.customChapters && data.customChapters[cat]) || []).map(x => x.name);
         return [...base, ...custom];
       };
-
       const getNextChapter = (cat) => {
         const chs = getFullChapterList(cat).filter(ch => !isHiddenChapter(cat, ch));
-        return chs.find(ch => !data.topics?.[(cat + "-" + ch)]) || "Finished! 🎉";
+        return chs.find(ch => !(data.topics && data.topics[cat + "-" + ch])) || "Finished! 🎉";
       };
       const handleTopicClick = (cat, ch) => {
         const key = cat + "-" + ch; const t = { ...(data.topics || {}) };
@@ -216,7 +248,7 @@
       const subjectProgress = useMemo(() => Object.keys(SYLLABUS).map(cat => {
         const chapters = getFullChapterList(cat);
         const total = chapters.length;
-        const done = chapters.filter(ch => !!data.topics?.[(cat + "-" + ch)]).length;
+        const done = chapters.filter(ch => !!(data.topics && data.topics[cat + "-" + ch])).length;
         return { cat, done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
       }), [data.topics, data.customChapters, data.deletedChapters]);
 
@@ -228,12 +260,11 @@
 
       const streak = useMemo(() => {
         let s = 0; const now = new Date();
-        const todayStr = localISO(now);
-        const todayActive = (data.dailyLog?.[todayStr] || []).length > 0;
+        const todayActive = ((data.dailyLog && data.dailyLog[localISO(now)]) || []).length > 0;
         const start = todayActive ? 0 : 1;
         for (let i = start; i < 365; i++) {
           const d = new Date(now); d.setDate(d.getDate() - i);
-          if ((data.dailyLog?.[localISO(d)] || []).length > 0) s++;
+          if (((data.dailyLog && data.dailyLog[localISO(d)]) || []).length > 0) s++;
           else break;
         }
         return s;
@@ -251,7 +282,7 @@
         return w;
       }, [heatmapDays]);
 
-      const getHeatLevel = (iso) => { const n = (data.dailyLog?.[iso] || []).length; if (n === 0) return 0; if (n === 1) return 1; if (n <= 3) return 2; return 3; };
+      const getHeatLevel = (iso) => { const n = ((data.dailyLog && data.dailyLog[iso]) || []).length; if (n === 0) return 0; if (n === 1) return 1; if (n <= 3) return 2; return 3; };
 
       const flWithComposite = useMemo(() =>
         (data.flScores || []).map(s => ({ ...s, composite: (Number(s.cp)||0)+(Number(s.cars)||0)+(Number(s.bb)||0)+(Number(s.ps)||0) }))
@@ -262,7 +293,7 @@
         if (!cs.length) return null;
         const sorted = [...flWithComposite].sort((a, b) => new Date(b.date) - new Date(a.date));
         const chronological = [...flWithComposite].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>s.composite).filter(c=>c>0);
-        return { best: Math.max(...cs), avg: Math.round(cs.reduce((a,b)=>a+b,0)/cs.length), latest: sorted[0]?.composite, trend: chronological.length >= 2 ? chronological[chronological.length-1] - chronological[0] : 0 };
+        return { best: Math.max(...cs), avg: Math.round(cs.reduce((a,b)=>a+b,0)/cs.length), latest: sorted[0] && sorted[0].composite, trend: chronological.length >= 2 ? chronological[chronological.length-1] - chronological[0] : 0 };
       }, [flWithComposite]);
 
       const sortedScores = useMemo(() => [...(data.flScores||[])].sort((a,b)=>new Date(a.date)-new Date(b.date)), [data.flScores]);
@@ -315,7 +346,7 @@
         });
       }, [activeTab, sortedCarsLog]);
 
-      const deleteCards = (id) => { const row=(data.cards||[]).find(x=>x.id===id); const nc=(data.cards||[]).filter(x=>x.id!==id); setData({...data,cards:nc}); if(row?.date) syncCardsLogForDate(row.date,nc); };
+      const deleteCards = (id) => { const row=(data.cards||[]).find(x=>x.id===id); const nc=(data.cards||[]).filter(x=>x.id!==id); setData({...data,cards:nc}); if(row&&row.date) syncCardsLogForDate(row.date,nc); };
       const deleteFL = (id) => setData({...data,flScores:(data.flScores||[]).filter(x=>x.id!==id)});
       const deleteAcc = (id) => setData({...data,accuracy:(data.accuracy||[]).filter(x=>x.id!==id)});
       const deleteCars = (id) => setData({...data,carsLog:(data.carsLog||[]).filter(x=>x.id!==id)});
@@ -336,12 +367,44 @@
           </div>
         </div>`;
 
-      const todaysExtras = data.dailyExtras?.[todayISO] || [];
+      const todaysExtras = (data.dailyExtras && data.dailyExtras[todayISO]) || [];
 
       return html`
         <div class="min-h-screen">
 
-          <!-- HEADER -->
+          ${showBackup && html`
+            <div class="backup-overlay animate-slide" onClick=${(e)=>{ if(e.target===e.currentTarget) setShowBackup(false); }}>
+              <div class="backup-panel animate-pop">
+                <div class="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 class="text-base font-black text-slate-800">💾 Data Backup</h3>
+                    <p class="text-[10px] font-bold text-slate-400 mt-0.5">Export or restore all your MCAT data</p>
+                  </div>
+                  <button onClick=${()=>setShowBackup(false)} class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-black text-sm">✕</button>
+                </div>
+                <button onClick=${exportJSON} class="w-full flex items-center gap-4 p-4 rounded-2xl bg-indigo-600 text-white mb-3 shadow-lg active:scale-95 transition-transform">
+                  <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0">⬇️</div>
+                  <div class="text-left">
+                    <p class="text-xs font-black uppercase tracking-wide">Export JSON</p>
+                    <p class="text-[10px] font-bold text-indigo-200 mt-0.5">Downloads a full backup of your data</p>
+                  </div>
+                </button>
+                <button onClick=${()=>importInputRef.current&&importInputRef.current.click()} class="w-full flex items-center gap-4 p-4 rounded-2xl bg-emerald-500 text-white mb-3 shadow-lg active:scale-95 transition-transform">
+                  <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0">⬆️</div>
+                  <div class="text-left">
+                    <p class="text-xs font-black uppercase tracking-wide">Import JSON</p>
+                    <p class="text-[10px] font-bold text-emerald-100 mt-0.5">Restore from a previous backup file</p>
+                  </div>
+                </button>
+                <input ref=${importInputRef} type="file" accept=".json,application/json" style="display:none" onChange=${importJSON} />
+                ${importStatus && html`
+                  <div class=${"text-center text-[11px] font-black py-2 px-4 rounded-xl mt-1 "+(importStatus.startsWith('✅')?'bg-emerald-50 text-emerald-700':'bg-red-50 text-red-600')}>
+                    ${importStatus}
+                  </div>`}
+                <p class="text-center text-[9px] font-bold text-slate-300 mt-4">Tip: export after every big study session 💡</p>
+              </div>
+            </div>`}
+
           <header class="p-4 bg-white border-b sticky top-0 z-40 space-y-2">
             <div class="flex justify-between items-center">
               <div>
@@ -353,6 +416,8 @@
                   <div class="flex items-center gap-1 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-xl">
                     <span class="text-base">🔥</span><span class="text-[11px] font-black text-orange-600">${streak} day streak</span>
                   </div>`}
+                <button onClick=${()=>{ setImportStatus(''); setShowBackup(v=>!v); }} title="Backup / Restore"
+                  class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-base active:scale-95 transition-transform shadow-sm">💾</button>
                 <button onClick=${()=>signOut(auth)} class="text-[9px] font-black text-red-400 uppercase bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">Out</button>
               </div>
             </div>
@@ -369,7 +434,6 @@
 
           <main class="p-5 space-y-5 animate-slide">
 
-            <!-- TODAY'S PROTOCOL -->
             <section class="glass-card p-5 bg-slate-900 text-white shadow-2xl relative overflow-hidden">
               <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500 blur-[80px] opacity-20"></div>
               <div class="flex justify-between items-center mb-4 relative z-10">
@@ -385,7 +449,7 @@
               <div class="space-y-3 relative z-10">
                 ${(data.activeRotation||[]).map(topic=>{
                   const checkKey=todayISO+"-content-"+topic, frozenKey=todayISO+"-content-"+topic+"-frozen";
-                  const checked=!!data.dailyChecks?.[checkKey], frozen=data.dailyChecks?.[frozenKey]||'';
+                  const checked=!!(data.dailyChecks&&data.dailyChecks[checkKey]), frozen=(data.dailyChecks&&data.dailyChecks[frozenKey])||'';
                   return html`
                     <div class="flex items-start gap-3">
                       <input type="checkbox" checked=${checked} onChange=${()=>{
@@ -411,24 +475,24 @@
                         </div>
                         <select disabled=${checked}
                           class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-indigo-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                          value=${(frozen||'').trim()}
+                          value=${frozen.trim()}
                           onChange=${e=>{const v=e.target.value;const nc={...(data.dailyChecks||{})};if(!v)delete nc[frozenKey];else nc[frozenKey]=v;setData({...data,dailyChecks:nc});}}>
                           <option value="">Auto (Next Unfinished)</option>
-                          ${getFullChapterList(topic).map(ch=>{const done=!!data.topics?.[(topic+"-"+ch)];return html`<option value=${getChapterLabel(topic,ch)} disabled=${done}>${getChapterLabel(topic,ch)}${done?' ✓':''}</option>`;})}
+                          ${getFullChapterList(topic).map(ch=>{const done=!!(data.topics&&data.topics[topic+"-"+ch]);return html`<option value=${getChapterLabel(topic,ch)} disabled=${done}>${getChapterLabel(topic,ch)}${done?' ✓':''}</option>`;})}
                         </select>
                         <div class="mt-1 text-[10px] font-black text-slate-400">Selected: <span class="text-slate-100">${(()=>{const r=frozen||getNextChapter(topic);return r==="Finished! 🎉"?r:getChapterLabel(topic,r);})()}</span></div>
                       </div>
                     </div>`;
                 })}
                 <label class="flex items-center space-x-3 cursor-pointer">
-                  <input type="checkbox" checked=${!!data.dailyChecks?.[todayISO+"-cars"]}
-                    onChange=${()=>{const k=todayISO+"-cars";setTaskCheck({key:k,label:'Daily CARS Passage',checked:!data.dailyChecks?.[k]});}}
+                  <input type="checkbox" checked=${!!(data.dailyChecks&&data.dailyChecks[todayISO+"-cars"])}
+                    onChange=${()=>{const k=todayISO+"-cars";setTaskCheck({key:k,label:'Daily CARS Passage',checked:!(data.dailyChecks&&data.dailyChecks[k])});}}
                     class="todo-check w-5 h-5 rounded-full accent-green-500" />
                   <span class="text-sm font-bold text-slate-100">Daily CARS Passage</span>
                 </label>
                 <label class="flex items-center space-x-3 cursor-pointer">
-                  <input type="checkbox" checked=${!!data.dailyChecks?.[todayISO+"-practice"]}
-                    onChange=${()=>{const k=todayISO+"-practice";setTaskCheck({key:k,label:'Practice Questions',checked:!data.dailyChecks?.[k]});}}
+                  <input type="checkbox" checked=${!!(data.dailyChecks&&data.dailyChecks[todayISO+"-practice"])}
+                    onChange=${()=>{const k=todayISO+"-practice";setTaskCheck({key:k,label:'Practice Questions',checked:!(data.dailyChecks&&data.dailyChecks[k])});}}
                     class="todo-check w-5 h-5 rounded-full accent-pink-500" />
                   <span class="text-sm font-bold text-slate-100">Practice Questions</span>
                 </label>
@@ -438,12 +502,12 @@
                     <select class="flex-1 bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] font-black text-slate-100"
                       value=${data.extraPick||''} onChange=${e=>setData({...data,extraPick:e.target.value})}>
                       <option value="">Select a chapter…</option>
-                      ${Object.keys(SYLLABUS).map(cat=>html`<optgroup label=${cat}>${getFullChapterList(cat).map(ch=>html`<option value=${cat+"|||"+ch}>${cat} — ${getChapterLabel(cat, ch)}</option>`)}</optgroup>`)}
+                      ${Object.keys(SYLLABUS).map(cat=>html`<optgroup label=${cat}>${getFullChapterList(cat).map(ch=>html`<option value=${cat+"|||"+ch}>${cat} — ${getChapterLabel(cat,ch)}</option>`)}</optgroup>`)}
                     </select>
                     <button class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase"
                       onClick=${()=>{
                         if(!data.extraPick)return;
-                        const[cat,ch]=data.extraPick.split('|||');
+                        const parts=data.extraPick.split('|||');const cat=parts[0],ch=parts[1];
                         const id=Date.now(),ne={...(data.dailyExtras||{})};
                         const arr=ne[todayISO]?[...ne[todayISO]]:[];arr.unshift({id,cat,ch});ne[todayISO]=arr;
                         setData({...data,dailyExtras:ne,extraPick:''});
@@ -452,7 +516,7 @@
                   ${todaysExtras.length>0&&html`
                     <div class="mt-3 space-y-2">
                       ${todaysExtras.map(ex=>{
-                        const ck=todayISO+"-extra-"+ex.id,chk=!!data.dailyChecks?.[ck],hk=ex.cat+"-"+ex.ch;
+                        const ck=todayISO+"-extra-"+ex.id,chk=!!(data.dailyChecks&&data.dailyChecks[ck]),hk=ex.cat+"-"+ex.ch;
                         return html`
                           <div class="flex items-center justify-between gap-2">
                             <label class="flex items-center space-x-3 cursor-pointer flex-1">
@@ -461,7 +525,7 @@
                                 if(!chk){nc[ck]=true;nt[hk]=nt[hk]||{date:todayISO,resource:ex.cat==='Psych Soc'?data.psResource:'Standard'};setData({...data,dailyChecks:nc,topics:nt});upsertLogItem(todayISO,{type:'extra',key:hk,label:"Extra Chapter: "+ex.cat+" — "+getChapterLabel(ex.cat,ex.ch)});}
                                 else{delete nc[ck];delete nt[hk];setData({...data,dailyChecks:nc,topics:nt});removeLogItem(todayISO,x=>x.type==='extra'&&x.key===hk);}
                               }} class="todo-check w-5 h-5 rounded-full accent-indigo-500" />
-                              <span class="text-sm font-bold text-slate-100">Extra: <span class="text-indigo-300">${ex.cat} — ${getChapterLabel(ex.cat, ex.ch)}</span></span>
+                              <span class="text-sm font-bold text-slate-100">Extra: <span class="text-indigo-300">${ex.cat} — ${getChapterLabel(ex.cat,ex.ch)}</span></span>
                             </label>
                             <button class="text-[10px] font-black uppercase text-red-300 bg-red-900/20 px-3 py-2 rounded-xl border border-red-900/30"
                               onClick=${()=>{
@@ -477,7 +541,6 @@
               </div>
             </section>
 
-            <!-- HOME TAB -->
             ${activeTab==='home'&&html`
               <div class="space-y-4">
                 <div class="glass-card p-5 space-y-4">
@@ -508,7 +571,6 @@
                       </div>`)}
                   </div>
                 </div>
-
                 <div class="glass-card p-5">
                   <div class="flex items-center justify-between mb-3">
                     <h2 class="text-sm font-black uppercase text-slate-700 tracking-wider">Activity Heatmap</h2>
@@ -528,115 +590,82 @@
                       </div>`)}
                   </div>
                   <div class="flex justify-between mt-2">
-                    <span class="text-[9px] font-bold text-slate-400">${heatmapDays[0]?.slice(5)}</span>
+                    <span class="text-[9px] font-bold text-slate-400">${heatmapDays[0]&&heatmapDays[0].slice(5)}</span>
                     <span class="text-[9px] font-bold text-slate-400">today</span>
                   </div>
                 </div>
-
                 <div class="flex space-x-2 custom-scroll no-scrollbar p-1">
                   ${Object.keys(SYLLABUS).map(cat=>{const sp=subjectProgress.find(s=>s.cat===cat);return html`
                     <button onClick=${()=>setSyllabusCat(cat)}
                       class=${"px-4 py-2.5 rounded-full text-[10px] font-black uppercase whitespace-nowrap shadow-sm transition-all "+(syllabusCat===cat?'bg-indigo-600 text-white':'bg-white border text-slate-400')}>
-                      ${cat} <span class="opacity-60 text-[9px]">${sp?.done}/${sp?.total}</span>
+                      ${cat} <span class="opacity-60 text-[9px]">${sp&&sp.done}/${sp&&sp.total}</span>
                     </button>`;})}
                 </div>
-
                 <div class="grid grid-cols-1 gap-3 animate-slide">
                   ${getFullChapterList(syllabusCat).filter(t=>!isHiddenChapter(syllabusCat,t)).map(t=>{
                     const isCustom = !(SYLLABUS[syllabusCat]||[]).includes(t);
                     return html`
-                    <div class="glass-card p-4 flex justify-between items-center ${isCustom?'border-l-4 border-l-violet-400':''}">
+                    <div class=${"glass-card p-4 flex justify-between items-center "+(isCustom?'border-l-4 border-l-violet-400':'')}>
                       <div onClick=${()=>handleTopicClick(syllabusCat,t)} class="flex flex-col flex-1 cursor-pointer">
                         <div class="flex items-center gap-1.5">
-                          <span class=${"text-xs font-black "+(data.topics?.[(syllabusCat+"-"+t)]?'text-green-700':'text-slate-700')}>
+                          <span class=${"text-xs font-black "+((data.topics&&data.topics[syllabusCat+"-"+t])?'text-green-700':'text-slate-700')}>
                             ${getChapterLabel(syllabusCat,t)}
                           </span>
                           ${isCustom&&html`<span class="text-[8px] font-black uppercase bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-md">custom</span>`}
-                          ${data.chapterAliases?.[(syllabusCat+"|||"+t)]&&html`<span class="text-[9px] text-slate-400">(renamed)</span>`}
+                          ${(data.chapterAliases&&data.chapterAliases[syllabusCat+"|||"+t])&&html`<span class="text-[9px] text-slate-400">(renamed)</span>`}
                         </div>
-                        ${data.topics?.[(syllabusCat+"-"+t)]?.date&&html`<span class="text-[9px] text-slate-400 mt-0.5">${data.topics[(syllabusCat+"-"+t)].date}</span>`}
+                        ${(data.topics&&data.topics[syllabusCat+"-"+t]&&data.topics[syllabusCat+"-"+t].date)&&html`<span class="text-[9px] text-slate-400 mt-0.5">${data.topics[syllabusCat+"-"+t].date}</span>`}
                       </div>
                       <div class="flex items-center gap-1.5">
-                        <button onClick=${(e)=>{e.stopPropagation();renameChapterDisplay(syllabusCat,t);}}
-                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Edit</button>
-                        <button onClick=${(e)=>{e.stopPropagation();toggleHideChapter(syllabusCat,t);}}
-                          class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Hide</button>
+                        <button onClick=${(e)=>{e.stopPropagation();renameChapterDisplay(syllabusCat,t);}} class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Edit</button>
+                        <button onClick=${(e)=>{e.stopPropagation();toggleHideChapter(syllabusCat,t);}} class="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-xl border border-slate-200">Hide</button>
                         <button onClick=${(e)=>{
                           e.stopPropagation();
-                          const msg = isCustom
-                            ? "Permanently delete custom chapter: "+t+"?"
-                            : "Permanently delete '"+t+"' from "+syllabusCat+"? (can restore via un-delete)";
-                          if(!confirm(msg)) return;
+                          const msg=isCustom?"Permanently delete custom chapter: "+t+"?":"Permanently delete '"+t+"' from "+syllabusCat+"?";
+                          if(!confirm(msg))return;
                           if(isCustom){
-                            const nc = {...(data.customChapters||{})};
-                            nc[syllabusCat] = (nc[syllabusCat]||[]).filter(x=>x.name!==t);
+                            const nc={...(data.customChapters||{})};nc[syllabusCat]=(nc[syllabusCat]||[]).filter(x=>x.name!==t);
                             const nt={...(data.topics||{})};delete nt[syllabusCat+"-"+t];
                             const na={...(data.chapterAliases||{})};delete na[syllabusCat+"|||"+t];
                             setData({...data,customChapters:nc,topics:nt,chapterAliases:na});
-                          } else {
-                            const nd={...(data.deletedChapters||{})};
-                            nd[syllabusCat+"|||"+t]=true;
+                          }else{
+                            const nd={...(data.deletedChapters||{})};nd[syllabusCat+"|||"+t]=true;
                             const nt={...(data.topics||{})};delete nt[syllabusCat+"-"+t];
                             const na={...(data.chapterAliases||{})};delete na[syllabusCat+"|||"+t];
                             setData({...data,deletedChapters:nd,topics:nt,chapterAliases:na});
                           }
-                        }}
-                          class="text-[9px] font-black uppercase bg-red-50 text-red-500 px-2 py-1.5 rounded-xl border border-red-100">Del</button>
+                        }} class="text-[9px] font-black uppercase bg-red-50 text-red-500 px-2 py-1.5 rounded-xl border border-red-100">Del</button>
                         <div onClick=${()=>handleTopicClick(syllabusCat,t)}
-                          class=${"w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer "+(data.topics?.[(syllabusCat+"-"+t)]?'bg-green-500 border-green-500':'border-slate-200')}>
-                          ${data.topics?.[(syllabusCat+"-"+t)]&&html`<span class="text-white text-[10px]">✓</span>`}
+                          class=${"w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer "+((data.topics&&data.topics[syllabusCat+"-"+t])?'bg-green-500 border-green-500':'border-slate-200')}>
+                          ${(data.topics&&data.topics[syllabusCat+"-"+t])&&html`<span class="text-white text-[10px]">✓</span>`}
                         </div>
                       </div>
                     </div>`;
                   })}
                 </div>
-
                 <div class="glass-card p-4 border border-violet-200 bg-violet-50/40">
-                  <p class="text-[10px] font-black uppercase text-violet-600 tracking-widest mb-3">
-                    + Add Custom Chapter to ${syllabusCat}
-                  </p>
+                  <p class="text-[10px] font-black uppercase text-violet-600 tracking-widest mb-3">+ Add Custom Chapter to ${syllabusCat}</p>
                   <div class="flex gap-2">
-                    <input
-                      id="custom-ch-input"
-                      type="text"
-                      placeholder="e.g. Ch 13: Extra Topic…"
+                    <input id="custom-ch-input" type="text" placeholder="e.g. Ch 13: Extra Topic…"
                       class="flex-1 bg-white border border-violet-200 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700 placeholder:text-slate-400"
                       onKeyDown=${(e)=>{
-                        if(e.key==='Enter'){
-                          const val=e.target.value.trim();
-                          if(!val)return;
-                          const existing=getFullChapterList(syllabusCat);
-                          if(existing.includes(val)){alert("Chapter already exists!");return;}
-                          const nc={...(data.customChapters||{})};
-                          nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
-                          setData({...data,customChapters:nc});
-                          e.target.value='';
-                        }
-                      }}
-                    />
-                    <button
-                      class="bg-violet-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow-sm"
+                        if(e.key==='Enter'){const val=e.target.value.trim();if(!val)return;
+                          const existing=getFullChapterList(syllabusCat);if(existing.includes(val)){alert("Chapter already exists!");return;}
+                          const nc={...(data.customChapters||{})};nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
+                          setData({...data,customChapters:nc});e.target.value='';}}} />
+                    <button class="bg-violet-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow-sm"
                       onClick=${()=>{
-                        const inp=document.getElementById('custom-ch-input');
-                        const val=(inp?.value||'').trim();
-                        if(!val)return;
-                        const existing=getFullChapterList(syllabusCat);
-                        if(existing.includes(val)){alert("Chapter already exists!");return;}
-                        const nc={...(data.customChapters||{})};
-                        nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
-                        setData({...data,customChapters:nc});
-                        if(inp)inp.value='';
-                      }}
-                    >+ Add</button>
+                        const inp=document.getElementById('custom-ch-input');const val=(inp&&inp.value||'').trim();if(!val)return;
+                        const existing=getFullChapterList(syllabusCat);if(existing.includes(val)){alert("Chapter already exists!");return;}
+                        const nc={...(data.customChapters||{})};nc[syllabusCat]=[...(nc[syllabusCat]||[]),{id:Date.now(),name:val}];
+                        setData({...data,customChapters:nc});if(inp)inp.value='';
+                      }}>+ Add</button>
                   </div>
                 </div>
-
                 ${Object.keys(data.deletedChapters||{}).filter(k=>k.startsWith(syllabusCat+"|||")).length>0&&html`
                   <div class="glass-card overflow-hidden border border-rose-200">
                     <div class="px-4 py-3 bg-rose-50 flex items-center justify-between">
-                      <span class="text-[10px] font-black uppercase text-rose-600 tracking-widest">
-                        Deleted Chapters (${syllabusCat})
-                      </span>
+                      <span class="text-[10px] font-black uppercase text-rose-600 tracking-widest">Deleted Chapters (${syllabusCat})</span>
                       <span class="text-[9px] font-bold text-rose-400">tap to restore</span>
                     </div>
                     <div class="divide-y divide-slate-100">
@@ -645,18 +674,12 @@
                         return html`
                           <div class="flex items-center justify-between px-4 py-3">
                             <span class="text-xs font-bold text-slate-600">${ch}</span>
-                            <button onClick=${()=>{
-                              const nd={...(data.deletedChapters||{})};
-                              delete nd[k];
-                              setData({...data,deletedChapters:nd});
-                            }} class="text-[9px] font-black uppercase bg-indigo-600 text-white px-3 py-1.5 rounded-xl">
-                              Restore
-                            </button>
+                            <button onClick=${()=>{const nd={...(data.deletedChapters||{})};delete nd[k];setData({...data,deletedChapters:nd});}}
+                              class="text-[9px] font-black uppercase bg-indigo-600 text-white px-3 py-1.5 rounded-xl">Restore</button>
                           </div>`;
                       })}
                     </div>
                   </div>`}
-
                 ${allHiddenChapters.length>0&&html`
                   <div class="glass-card overflow-hidden border border-amber-200">
                     <button onClick=${()=>setShowHidden(v=>!v)} class="w-full flex items-center justify-between px-5 py-4 bg-amber-50">
@@ -673,54 +696,40 @@
                             <div class="flex flex-col">
                               <span class="text-[10px] font-black uppercase text-indigo-400">${cat}</span>
                               <span class="text-xs font-bold text-slate-700 mt-0.5">${getChapterLabel(cat,ch)}</span>
-                              ${data.topics?.[(cat+"-"+ch)]&&html`<span class="text-[9px] font-black text-green-600">✓ Completed</span>`}
+                              ${(data.topics&&data.topics[cat+"-"+ch])&&html`<span class="text-[9px] font-black text-green-600">✓ Completed</span>`}
                             </div>
-                            <button onClick=${()=>toggleHideChapter(cat,ch)}
-                              class="text-[9px] font-black uppercase bg-indigo-600 text-white px-4 py-2 rounded-xl">Unhide</button>
+                            <button onClick=${()=>toggleHideChapter(cat,ch)} class="text-[9px] font-black uppercase bg-indigo-600 text-white px-4 py-2 rounded-xl">Unhide</button>
                           </div>`)}
                       </div>
                       <div class="px-5 py-3 bg-slate-50 border-t">
-                        <button onClick=${()=>{if(!confirm("Unhide all "+allHiddenChapters.length+" chapters?"))return;setData({...data,hiddenChapters:{}});}}
-                          class="w-full text-[10px] font-black uppercase text-red-500 bg-red-50 border border-red-100 py-2 rounded-xl">
-                          Unhide All (${allHiddenChapters.length})
-                        </button>
+                        <button onClick=${()=>{if(!confirm("Unhide all "+allHiddenChapters.length+" chapters?"))return;setData({...data,hiddenChapters:{}}); }}
+                          class="w-full text-[10px] font-black uppercase text-red-500 bg-red-50 border border-red-100 py-2 rounded-xl">Unhide All (${allHiddenChapters.length})</button>
                       </div>`}
                   </div>`}
               </div>`}
 
-            <!-- CARS TAB -->
             ${activeTab==='cars'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
                   <h2 class="text-xl font-black">CARS Logger</h2>
                   <p class="text-[10px] font-black text-slate-400 uppercase">every passage</p>
                 </div>
-
                 ${carsStats&&html`
                   <div class="grid grid-cols-4 gap-2">
-                    ${[
-                      {label:'Passages',value:carsStats.total,color:'text-indigo-600'},
-                      {label:'Latest',value:carsStats.latest+'%',color:'text-slate-700'},
-                      {label:'Average',value:carsStats.avg+'%',color:carsStats.avg>=70?'text-green-600':'text-amber-600'},
-                      {label:'Best',value:carsStats.best+'%',color:'text-green-600'}
-                    ].map(st=>html`
+                    ${[{label:'Passages',value:carsStats.total,color:'text-indigo-600'},{label:'Latest',value:carsStats.latest+'%',color:'text-slate-700'},{label:'Average',value:carsStats.avg+'%',color:carsStats.avg>=70?'text-green-600':'text-amber-600'},{label:'Best',value:carsStats.best+'%',color:'text-green-600'}].map(st=>html`
                       <div class="glass-card p-3 text-center">
                         <p class="text-[8px] font-black uppercase text-slate-400 mb-1">${st.label}</p>
                         <p class=${"text-lg font-black "+st.color}>${st.value}</p>
                       </div>`)}
                   </div>`}
-
                 ${sortedCarsLog.filter(e=>e.total>0).length>=2&&html`
                   <div class="glass-card p-4 shadow-inner">
                     <p class="text-[9px] font-black uppercase text-slate-400 mb-2">Score Trend</p>
                     <div style="height:160px"><canvas ref=${carsChartRef}></canvas></div>
                   </div>`}
-
                 <button onClick=${()=>setData({...data,carsLog:[{id:Date.now(),date:todayISO,source:'Jack Westin',correct:0,total:0,notes:''},...(data.carsLog||[])]})}
                   class="w-full bg-amber-500 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg">+ Log CARS Passage</button>
-
                 ${(data.carsLog||[]).length===0&&html`<div class="glass-card p-6 text-center text-[11px] font-bold text-slate-400">No CARS entries yet. Start logging to see your trend!</div>`}
-
                 ${(data.carsLog||[]).map(r=>{
                   const pct=r.total>0?Math.round((r.correct/r.total)*100):null;
                   const pc=pct===null?'text-slate-400':pct>=75?'text-green-600':pct>=60?'text-amber-600':'text-red-500';
@@ -731,31 +740,25 @@
                           onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,date:e.target.value}:x)})} />
                         <div class="flex items-center gap-3">
                           ${pct!==null&&html`<span class=${"text-xl font-black "+pc}>${pct}%</span>`}
-                          <button onClick=${()=>deleteCars(r.id)}
-                            class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
+                          <button onClick=${()=>deleteCars(r.id)} class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                         </div>
                       </div>
                       <select class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black text-slate-700"
-                        value=${r.source||'Jack Westin'}
-                        onChange=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,source:e.target.value}:x)})}>
+                        value=${r.source||'Jack Westin'} onChange=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,source:e.target.value}:x)})}>
                         ${CARS_SOURCES.map(s=>html`<option value=${s}>${s}</option>`)}
                       </select>
                       <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2 flex-1">
                           <div class="flex-1 text-center">
                             <p class="text-[8px] font-black uppercase text-slate-400 mb-1">Correct</p>
-                            <input type="number" min="0"
-                              class="w-full text-center font-black text-xl text-indigo-600 bg-slate-50 border border-slate-200 rounded-xl py-2"
-                              value=${Number(r.correct||0)}
-                              onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,correct:Number(e.target.value||0)}:x)})} />
+                            <input type="number" min="0" class="w-full text-center font-black text-xl text-indigo-600 bg-slate-50 border border-slate-200 rounded-xl py-2"
+                              value=${Number(r.correct||0)} onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,correct:Number(e.target.value||0)}:x)})} />
                           </div>
                           <span class="text-slate-400 font-black text-xl">/</span>
                           <div class="flex-1 text-center">
                             <p class="text-[8px] font-black uppercase text-slate-400 mb-1">Total Qs</p>
-                            <input type="number" min="0"
-                              class="w-full text-center font-black text-xl bg-slate-50 border border-slate-200 rounded-xl py-2"
-                              value=${Number(r.total||0)}
-                              onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,total:Number(e.target.value||0)}:x)})} />
+                            <input type="number" min="0" class="w-full text-center font-black text-xl bg-slate-50 border border-slate-200 rounded-xl py-2"
+                              value=${Number(r.total||0)} onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,total:Number(e.target.value||0)}:x)})} />
                           </div>
                         </div>
                         ${pct!==null&&html`
@@ -767,14 +770,12 @@
                         <p class="text-[9px] font-black uppercase text-slate-400 mb-1">Notes (optional)</p>
                         <input type="text" placeholder="e.g. struggled with humanities…"
                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700"
-                          value=${r.notes||''}
-                          onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,notes:e.target.value}:x)})} />
+                          value=${r.notes||''} onInput=${e=>setData({...data,carsLog:(data.carsLog||[]).map(x=>x.id===r.id?{...x,notes:e.target.value}:x)})} />
                       </div>
                     </div>`;
                 })}
               </div>`}
 
-            <!-- CARDS TAB -->
             ${activeTab==='cards'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -792,39 +793,28 @@
                       <input type="number" class="w-24 text-right font-black text-xl" value=${Number(a.count||0)}
                         onInput=${e=>{const nc=(data.cards||[]).map(x=>x.id===a.id?{...x,count:Number(e.target.value||0)}:x);setData({...data,cards:nc});syncCardsLogForDate(a.date||todayISO,nc);}} />
                     </div>
-                    <button onClick=${()=>deleteCards(a.id)}
-                      class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
+                    <button onClick=${()=>deleteCards(a.id)} class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                   </div>`)}
               </div>`}
 
-            <!-- SCORES TAB -->
             ${activeTab==='scores'&&html`
               <div class="space-y-5 animate-slide">
                 <h2 class="text-xl font-black">Full Length Scores</h2>
-
                 ${flStats&&html`
                   <div class="grid grid-cols-4 gap-2">
-                    ${[
-                      {label:'Latest',value:flStats.latest,color:'text-indigo-600'},
-                      {label:'Best',value:flStats.best,color:'text-green-600'},
-                      {label:'Avg',value:flStats.avg,color:'text-slate-700'},
-                      {label:'Trend',value:(flStats.trend>=0?'+':'')+flStats.trend,color:flStats.trend>0?'text-green-600':flStats.trend<0?'text-red-500':'text-slate-400'}
-                    ].map(st=>html`
+                    ${[{label:'Latest',value:flStats.latest,color:'text-indigo-600'},{label:'Best',value:flStats.best,color:'text-green-600'},{label:'Avg',value:flStats.avg,color:'text-slate-700'},{label:'Trend',value:(flStats.trend>=0?'+':'')+flStats.trend,color:flStats.trend>0?'text-green-600':flStats.trend<0?'text-red-500':'text-slate-400'}].map(st=>html`
                       <div class="glass-card p-3 text-center">
                         <p class="text-[8px] font-black uppercase text-slate-400 mb-1">${st.label}</p>
                         <p class=${"text-xl font-black "+st.color}>${st.value}</p>
                         <p class="text-[8px] text-slate-400">composite</p>
                       </div>`)}
                   </div>`}
-
                 <div class="glass-card p-4 shadow-inner">
                   <p class="text-[9px] font-black uppercase text-slate-400 mb-1">Section Score Trends</p>
                   <div style="height:220px"><canvas ref=${chartRef}></canvas></div>
                 </div>
-
                 <button onClick=${()=>setData({...data,flScores:[{id:Date.now(),date:todayISO,source:'AAMC FL',cp:125,cars:125,bb:125,ps:125},...(data.flScores||[])]})}
                   class="w-full bg-slate-900 text-white p-5 rounded-2xl font-black uppercase text-xs">+ New Full Length</button>
-
                 ${flWithComposite.map(s=>html`
                   <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between gap-3">
@@ -835,8 +825,7 @@
                           <p class="text-[8px] font-black uppercase text-slate-400">Composite</p>
                           <p class="text-2xl font-black text-indigo-600">${s.composite>0?s.composite:'--'}</p>
                         </div>
-                        <button onClick=${()=>deleteFL(s.id)}
-                          class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
+                        <button onClick=${()=>deleteFL(s.id)} class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                       </div>
                     </div>
                     <div class="grid grid-cols-4 gap-3">
@@ -850,7 +839,6 @@
                   </div>`)}
               </div>`}
 
-            <!-- ACCURACY TAB -->
             ${activeTab==='acc'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -865,8 +853,7 @@
                     <div class="flex items-center justify-between">
                       <input type="date" value=${r.date||todayISO} class="text-xs font-black text-indigo-600"
                         onInput=${e=>setData({...data,accuracy:(data.accuracy||[]).map(x=>x.id===r.id?{...x,date:e.target.value}:x)})} />
-                      <button onClick=${()=>deleteAcc(r.id)}
-                        class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
+                      <button onClick=${()=>deleteAcc(r.id)} class="text-[10px] font-black uppercase text-red-400 bg-red-50 px-3 py-2 rounded-xl border border-red-100">Delete</button>
                     </div>
                     <div class="grid grid-cols-3 gap-2">
                       <select class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black text-slate-700"
@@ -897,7 +884,6 @@
                   </div>`)}
               </div>`}
 
-            <!-- LOG TAB -->
             ${activeTab==='log'&&html`
               <div class="space-y-4 animate-slide">
                 <div class="flex items-end justify-between">
@@ -922,7 +908,6 @@
                   </div>`)}
               </div>`}
 
-            <!-- HELP TAB -->
             ${activeTab==='help'&&html`
               <div class="space-y-4 animate-slide">
                 ${[
@@ -930,9 +915,10 @@
                   {title:"Activity Heatmap + Streak",color:"text-purple-600",items:[["10-week grid","Each cell = one day; darker = more log entries."],["Today ring","Indigo ring marks today's cell."],["🔥 Streak","Header badge counts consecutive active days."]]},
                   {title:"CARS Logger",color:"text-amber-600",items:[["Per-passage log","Record source, correct/total, notes."],["Score trend chart","Auto-appears once you have 2+ scored entries."],["Color-coded %","Green ≥75%, amber ≥60%, red <60%."]]},
                   {title:"Full Length Scores",color:"text-green-600",items:[["Composite score","Auto-calculated (C/P+CARS+B/B+P/S) shown per FL."],["Stats banner","Latest / Best / Average / Trend across all FLs."]]},
-                  {title:"Readiness Calculator",color:"text-cyan-600",items:[["FL Scores (30%)","Avg of 3 most recent FLs, converted from 472–528 scale."],["AAMC (27%)","Direct QPack / Section Bank / IQB accuracy."],["UWorld (20%)","Calibrated up (~×1.18+8) to match AAMC difficulty."],["CARS (13%)","Average passage accuracy."],["Content (10%)","Chapter completion percentage."],["Blueprint Baseline","Shown as improvement reference — not included in weighting."]]},
+                  {title:"Readiness Calculator",color:"text-cyan-600",items:[["FL Scores (30%)","Avg of 3 most recent FLs, converted from 472–528 scale."],["AAMC (27%)","Direct QPack / Section Bank / IQB accuracy."],["UWorld (20%)","Calibrated up (~×1.18+8) to match AAMC difficulty."],["CARS (13%)","Average passage accuracy."],["Content (10%)","Chapter completion percentage."]]},
                   {title:"Accuracy",color:"text-blue-600",items:[["Color coding","Green ≥70%, amber <70%."],["Source/Category/Mode","Log exactly where each set came from."]]},
-                  {title:"Hidden Chapters",color:"text-slate-600",items:[["Hide","Removes from list without deleting progress."],["Unhide panel","Amber panel at bottom of Home tab."]]}
+                  {title:"Hidden Chapters",color:"text-slate-600",items:[["Hide","Removes from list without deleting progress."],["Unhide panel","Amber panel at bottom of Home tab."]]},
+                  {title:"💾 Data Backup",color:"text-indigo-600",items:[["Export JSON","Tap the 💾 button in the header to download a full backup."],["Import JSON","Tap 💾 then Import to restore from a backup file."],["When to use","Export before clearing browser data or switching devices."]]}
                 ].map(s=>html`
                   <div class="glass-card p-5 space-y-2">
                     <h3 class=${"text-sm font-black uppercase tracking-widest "+s.color}>${s.title}</h3>
@@ -940,127 +926,74 @@
                   </div>`)}
               </div>`}
 
-            <!-- READINESS TAB -->
             ${activeTab==='ready'&&html`
               <div class="space-y-5 animate-slide">
-
-                <!-- Blueprint Baseline Card -->
                 <div class="glass-card p-5 border border-blue-200">
                   <div class="flex items-center justify-between mb-3">
                     <div>
                       <h3 class="text-sm font-black uppercase text-blue-600 tracking-widest">Blueprint Diagnostic</h3>
                       <p class="text-[10px] font-bold text-slate-400 mt-0.5">Your baseline score before studying</p>
                     </div>
-                    <a href="https://blueprintprep.com/mcat/practice-exams"
-                      class="text-[9px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl uppercase whitespace-nowrap shadow">
-                      Take Free →
-                    </a>
+                    <a href="https://blueprintprep.com/mcat/practice-exams" class="text-[9px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl uppercase whitespace-nowrap shadow">Take Free →</a>
                   </div>
                   <div class="flex gap-3">
                     <div class="flex-1">
                       <p class="text-[9px] font-black uppercase text-slate-400 mb-1">Composite (472–528)</p>
                       <input type="number" min="472" max="528" placeholder="e.g. 499"
-                        value=${data.blueprintDiagnostic?.score||''}
+                        value=${(data.blueprintDiagnostic&&data.blueprintDiagnostic.score)||''}
                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xl font-black text-blue-600 text-center"
-                        onInput=${e=>{
-                          const v=Number(e.target.value);
-                          if(v>=472&&v<=528) setData({...data,blueprintDiagnostic:{...(data.blueprintDiagnostic||{}),score:v,date:data.blueprintDiagnostic?.date||todayISO}});
-                          else if(!e.target.value) setData({...data,blueprintDiagnostic:null});
-                        }} />
+                        onInput=${e=>{const v=Number(e.target.value);if(v>=472&&v<=528)setData({...data,blueprintDiagnostic:{...(data.blueprintDiagnostic||{}),score:v,date:(data.blueprintDiagnostic&&data.blueprintDiagnostic.date)||todayISO}});else if(!e.target.value)setData({...data,blueprintDiagnostic:null});}} />
                     </div>
                     <div class="flex-1">
                       <p class="text-[9px] font-black uppercase text-slate-400 mb-1">Date Taken</p>
-                      <input type="date" value=${data.blueprintDiagnostic?.date||''}
+                      <input type="date" value={(data.blueprintDiagnostic&&data.blueprintDiagnostic.date)||''}
                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-black text-slate-600"
-                        onInput=${e=>{if(data.blueprintDiagnostic) setData({...data,blueprintDiagnostic:{...data.blueprintDiagnostic,date:e.target.value}});}} />
+                        onInput=${e=>{if(data.blueprintDiagnostic)setData({...data,blueprintDiagnostic:{...data.blueprintDiagnostic,date:e.target.value}});}} />
                     </div>
                   </div>
                 </div>
-
-                <!-- Readiness Score Engine -->
                 ${(()=>{
-
-                  // ── 1. CONTENT % ─────────────────────────────────────────
                   let chDone=0,chTotal=0;
-                  Object.keys(SYLLABUS).forEach(cat=>{
-                    const chs=getFullChapterList(cat);
-                    chTotal+=chs.length;
-                    chDone+=chs.filter(ch=>!!data.topics?.[cat+"-"+ch]).length;
-                  });
+                  Object.keys(SYLLABUS).forEach(cat=>{const chs=getFullChapterList(cat);chTotal+=chs.length;chDone+=chs.filter(ch=>!!(data.topics&&data.topics[cat+"-"+ch])).length;});
                   const contentPct=chTotal>0?Math.round((chDone/chTotal)*100):0;
-
-                  // ── 2. UWORLD % → AAMC-EQUIVALENT ────────────────────────
                   const uwEntries=(data.accuracy||[]).filter(x=>x.source==='UWorld'&&x.total>0);
-                  const uwRaw=uwEntries.length>0
-                    ?Math.round(uwEntries.reduce((s,x)=>s+(x.correct/x.total),0)/uwEntries.length*100):null;
+                  const uwRaw=uwEntries.length>0?Math.round(uwEntries.reduce((s,x)=>s+(x.correct/x.total),0)/uwEntries.length*100):null;
                   const uwCalibrated=uwRaw!==null?Math.min(100,Math.round(uwRaw*1.18+8)):null;
-
-                  // ── 3. AAMC % (direct) ────────────────────────────────────
-                  const aamcEntries=(data.accuracy||[]).filter(x=>x.source?.includes('AAMC')&&x.total>0);
-                  const aamcPct=aamcEntries.length>0
-                    ?Math.round(aamcEntries.reduce((s,x)=>s+(x.correct/x.total),0)/aamcEntries.length*100):null;
-
-                  // ── 4. CARS % ─────────────────────────────────────────────
+                  const aamcEntries=(data.accuracy||[]).filter(x=>x.source&&x.source.includes('AAMC')&&x.total>0);
+                  const aamcPct=aamcEntries.length>0?Math.round(aamcEntries.reduce((s,x)=>s+(x.correct/x.total),0)/aamcEntries.length*100):null;
                   const carsEntries=(data.carsLog||[]).filter(x=>x.total>0);
-                  const carsPct=carsEntries.length>0
-                    ?Math.round(carsEntries.reduce((s,x)=>s+(x.correct/x.total),0)/carsEntries.length*100):null;
-
-                  // ── 5. FULL LENGTH SCORES ─────────────────────────────────
-                  // Convert composite (472–528) to 0–100% scale: (score-472)/56*100
+                  const carsPct=carsEntries.length>0?Math.round(carsEntries.reduce((s,x)=>s+(x.correct/x.total),0)/carsEntries.length*100):null;
                   const flComp=flWithComposite.filter(s=>s.composite>0);
                   const flSorted=[...flComp].sort((a,b)=>new Date(b.date)-new Date(a.date));
                   const flLatest=flSorted[0]||null;
-                  // Avg of most recent 3 FLs for stability
                   const flRecent=flSorted.slice(0,3);
-                  const flAvgComposite=flRecent.length>0
-                    ?Math.round(flRecent.reduce((s,x)=>s+x.composite,0)/flRecent.length):null;
-                  const flPct=flAvgComposite!==null
-                    ?Math.min(100,Math.max(0,Math.round(((flAvgComposite-472)/56)*100))):null;
-
-                  // ── 6. BLUEPRINT DIAGNOSTIC ──────────────────────────────
-                  const bpScore=data.blueprintDiagnostic?.score;
-                  const bpPct=bpScore?Math.min(100,Math.max(0,Math.round(((bpScore-472)/56)*100))):null;
-
-                  // ── WEIGHTS (re-normalised when data missing) ─────────────
-                  // FL 30% | AAMC 27% | UWorld(calibrated) 20% | CARS 13% | Content 10%
+                  const flAvgComposite=flRecent.length>0?Math.round(flRecent.reduce((s,x)=>s+x.composite,0)/flRecent.length):null;
+                  const flPct=flAvgComposite!==null?Math.min(100,Math.max(0,Math.round(((flAvgComposite-472)/56)*100))):null;
+                  const bpScore=data.blueprintDiagnostic&&data.blueprintDiagnostic.score;
                   const components=[
-                    {key:'fl',     label:'Full Lengths', pct:flPct,        weight:0.30, color:'#06b6d4',
-                     rawLabel:flAvgComposite!==null?('Avg composite: '+flAvgComposite+(flLatest?' · Latest: '+flLatest.composite+' ('+((new Date(flLatest.date)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+')'  :'')):null,
-                     desc:'Avg of '+(flRecent.length||0)+' most recent FL'+(flRecent.length!==1?'s':'')+' — converted from 472–528 scale'},
-                    {key:'aamc',   label:'AAMC',         pct:aamcPct,      weight:0.27, color:'#10b981', rawLabel:null,
-                     desc:'QPack / Section Bank / IQB — direct score'},
-                    {key:'uworld', label:'UWorld',       pct:uwCalibrated, weight:0.20, color:'#6366f1',
-                     rawLabel:uwRaw!==null?('Raw: '+uwRaw+'%'):null,
-                     desc:'Harder than AAMC — calibrated to AAMC scale'},
-                    {key:'cars',   label:'CARS',         pct:carsPct,      weight:0.13, color:'#f59e0b', rawLabel:null,
-                     desc:'Passage accuracy average'},
-                    {key:'content',label:'Content',      pct:contentPct,   weight:0.10, color:'#8b5cf6', rawLabel:null,
-                     desc:'Chapters completed across all subjects'},
+                    {key:'fl',label:'Full Lengths',pct:flPct,weight:0.30,color:'#06b6d4',rawLabel:flAvgComposite!==null?('Avg composite: '+flAvgComposite+(flLatest?' · Latest: '+flLatest.composite:'')):null,desc:'Avg of '+(flRecent.length||0)+' most recent FLs — converted from 472–528 scale'},
+                    {key:'aamc',label:'AAMC',pct:aamcPct,weight:0.27,color:'#10b981',rawLabel:null,desc:'QPack / Section Bank / IQB — direct score'},
+                    {key:'uworld',label:'UWorld',pct:uwCalibrated,weight:0.20,color:'#6366f1',rawLabel:uwRaw!==null?('Raw: '+uwRaw+'%'):null,desc:'Harder than AAMC — calibrated to AAMC scale'},
+                    {key:'cars',label:'CARS',pct:carsPct,weight:0.13,color:'#f59e0b',rawLabel:null,desc:'Passage accuracy average'},
+                    {key:'content',label:'Content',pct:contentPct,weight:0.10,color:'#8b5cf6',rawLabel:null,desc:'Chapters completed across all subjects'},
                   ];
                   const available=components.filter(c=>c.pct!==null);
                   const totalW=available.reduce((s,c)=>s+c.weight,0);
-                  const readiness=available.length>0
-                    ?Math.round(available.reduce((s,c)=>s+(c.pct*(c.weight/totalW)),0)):null;
-
-                  // ── SCORE PREDICTION MAP ──────────────────────────────────
+                  const readiness=available.length>0?Math.round(available.reduce((s,c)=>s+(c.pct*(c.weight/totalW)),0)):null;
                   const scoreMap=[
-                    {min:90,lo:518,hi:524,band:'Elite',         gradient:'from-emerald-500 to-teal-400',   text:'text-emerald-400'},
-                    {min:82,lo:514,hi:518,band:'Excellent',     gradient:'from-green-500 to-emerald-400',  text:'text-green-400'},
-                    {min:74,lo:510,hi:514,band:'Strong',        gradient:'from-teal-500 to-green-400',     text:'text-teal-400'},
-                    {min:65,lo:505,hi:510,band:'Good',          gradient:'from-blue-500 to-teal-400',      text:'text-blue-400'},
-                    {min:55,lo:500,hi:505,band:'Developing',    gradient:'from-amber-500 to-yellow-400',   text:'text-amber-400'},
-                    {min:45,lo:495,hi:500,band:'Building',      gradient:'from-orange-500 to-amber-400',   text:'text-orange-400'},
-                    {min:0, lo:488,hi:495,band:'Foundation',    gradient:'from-red-500 to-orange-400',     text:'text-red-400'},
+                    {min:90,lo:518,hi:524,band:'Elite',gradient:'from-emerald-500 to-teal-400',text:'text-emerald-400'},
+                    {min:82,lo:514,hi:518,band:'Excellent',gradient:'from-green-500 to-emerald-400',text:'text-green-400'},
+                    {min:74,lo:510,hi:514,band:'Strong',gradient:'from-teal-500 to-green-400',text:'text-teal-400'},
+                    {min:65,lo:505,hi:510,band:'Good',gradient:'from-blue-500 to-teal-400',text:'text-blue-400'},
+                    {min:55,lo:500,hi:505,band:'Developing',gradient:'from-amber-500 to-yellow-400',text:'text-amber-400'},
+                    {min:45,lo:495,hi:500,band:'Building',gradient:'from-orange-500 to-amber-400',text:'text-orange-400'},
+                    {min:0,lo:488,hi:495,band:'Foundation',gradient:'from-red-500 to-orange-400',text:'text-red-400'},
                   ];
                   const pred=readiness!==null?scoreMap.find(s=>readiness>=s.min):null;
-
                   const projectedMid=pred?Math.round((pred.lo+pred.hi)/2):null;
                   const improvement=bpScore&&projectedMid?projectedMid-bpScore:null;
-
-                  const missing=components.filter(c=>c.pct===null&&!(c.key==='content'));
-
+                  const missing=components.filter(c=>c.pct===null&&c.key!=='content');
                   return html`
-                    <!-- Hero Score Card -->
                     <div class="glass-card overflow-hidden">
                       <div class="bg-slate-900 p-6 relative overflow-hidden">
                         <div class="absolute inset-0 bg-gradient-to-br from-indigo-900/40 to-purple-900/40"></div>
@@ -1071,90 +1004,38 @@
                               <p class="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Exam Readiness Score</p>
                               <p class="text-[9px] text-slate-500 mt-0.5">Based on ${available.length}/5 data sources</p>
                             </div>
-                            ${pred&&html`
-                              <div class=${"text-xs font-black uppercase px-3 py-1.5 rounded-xl bg-white/10 "+pred.text}>
-                                ${pred.band}
-                              </div>`}
+                            ${pred&&html`<div class=${"text-xs font-black uppercase px-3 py-1.5 rounded-xl bg-white/10 "+pred.text}>${pred.band}</div>`}
                           </div>
-
                           ${readiness!==null?html`
                             <div class="flex items-end gap-6 mb-5">
-                              <div>
-                                <div class="text-8xl font-black text-white leading-none tracking-tighter">
-                                  ${readiness}<span class="text-4xl text-indigo-400">%</span>
-                                </div>
-                              </div>
+                              <div><div class="text-8xl font-black text-white leading-none tracking-tighter">${readiness}<span class="text-4xl text-indigo-400">%</span></div></div>
                               <div class="flex-1 pb-1 space-y-1">
                                 <p class="text-[9px] font-black uppercase text-slate-500">Predicted Score Range</p>
                                 <p class=${"text-3xl font-black "+pred.text}>${pred.lo}–${pred.hi}</p>
-                                ${bpScore?html`
-                                  <div class="flex items-center gap-2 mt-1">
-                                    <span class="text-[10px] font-bold text-slate-400">Baseline: ${bpScore}</span>
-                                    ${improvement!==null&&improvement>0?html`
-                                      <span class="text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-lg">
-                                        +${improvement} pts 🚀
-                                      </span>`:improvement!==null&&improvement===0?html`
-                                      <span class="text-[10px] font-black text-slate-400">holding steady</span>
-                                    `:improvement!==null&&improvement<0?html`
-                                      <span class="text-[10px] font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg">
-                                        ${improvement} pts from baseline
-                                      </span>`:null}
-                                  </div>`:null}
+                                ${bpScore?html`<div class="flex items-center gap-2 mt-1">
+                                  <span class="text-[10px] font-bold text-slate-400">Baseline: ${bpScore}</span>
+                                  ${improvement!==null&&improvement>0?html`<span class="text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-lg">+${improvement} pts 🚀</span>`:improvement===0?html`<span class="text-[10px] font-black text-slate-400">holding steady</span>`:improvement!==null&&improvement<0?html`<span class="text-[10px] font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg">${improvement} pts</span>`:null}
+                                </div>`:null}
                               </div>
                             </div>
-
-                            <!-- FL mini-summary if available -->
                             ${flComp.length>0&&html`
                               <div class="mb-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
                                 <p class="text-[9px] font-black uppercase text-cyan-400 tracking-widest mb-2">Full Length Summary</p>
                                 <div class="flex gap-4">
-                                  <div class="text-center">
-                                    <p class="text-[8px] font-black uppercase text-slate-500">FLs Logged</p>
-                                    <p class="text-lg font-black text-white">${flComp.length}</p>
-                                  </div>
-                                  ${flLatest&&html`
-                                    <div class="text-center">
-                                      <p class="text-[8px] font-black uppercase text-slate-500">Latest</p>
-                                      <p class="text-lg font-black text-cyan-300">${flLatest.composite}</p>
-                                    </div>`}
-                                  ${flComp.length>1&&html`
-                                    <div class="text-center">
-                                      <p class="text-[8px] font-black uppercase text-slate-500">Best</p>
-                                      <p class="text-lg font-black text-emerald-300">${Math.max(...flComp.map(x=>x.composite))}</p>
-                                    </div>`}
-                                  ${flAvgComposite&&html`
-                                    <div class="text-center">
-                                      <p class="text-[8px] font-black uppercase text-slate-500">3-FL Avg</p>
-                                      <p class="text-lg font-black text-white">${flAvgComposite}</p>
-                                    </div>`}
-                                  ${bpScore&&flLatest&&html`
-                                    <div class="text-center">
-                                      <p class="text-[8px] font-black uppercase text-slate-500">FL Growth</p>
-                                      <p class=${"text-lg font-black "+(flLatest.composite-bpScore>=0?'text-emerald-300':'text-red-300')}>
-                                        ${flLatest.composite-bpScore>=0?'+':''}${flLatest.composite-bpScore}
-                                      </p>
-                                    </div>`}
+                                  <div class="text-center"><p class="text-[8px] font-black uppercase text-slate-500">FLs Logged</p><p class="text-lg font-black text-white">${flComp.length}</p></div>
+                                  ${flLatest&&html`<div class="text-center"><p class="text-[8px] font-black uppercase text-slate-500">Latest</p><p class="text-lg font-black text-cyan-300">${flLatest.composite}</p></div>`}
+                                  ${flComp.length>1&&html`<div class="text-center"><p class="text-[8px] font-black uppercase text-slate-500">Best</p><p class="text-lg font-black text-emerald-300">${Math.max(...flComp.map(x=>x.composite))}</p></div>`}
+                                  ${flAvgComposite&&html`<div class="text-center"><p class="text-[8px] font-black uppercase text-slate-500">3-FL Avg</p><p class="text-lg font-black text-white">${flAvgComposite}</p></div>`}
+                                  ${bpScore&&flLatest&&html`<div class="text-center"><p class="text-[8px] font-black uppercase text-slate-500">FL Growth</p><p class=${"text-lg font-black "+(flLatest.composite-bpScore>=0?'text-emerald-300':'text-red-300')}>${flLatest.composite-bpScore>=0?'+':''}${flLatest.composite-bpScore}</p></div>`}
                                 </div>
                               </div>`}
-
-                            <!-- Readiness progress bar -->
                             <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
-                              <div class=${"h-3 rounded-full progress-bar bg-gradient-to-r "+pred.gradient}
-                                style=${"width:"+readiness+"%"}></div>
+                              <div class=${"h-3 rounded-full progress-bar bg-gradient-to-r "+pred.gradient} style=${"width:"+readiness+"%"}></div>
                             </div>
-                            <div class="flex justify-between mt-1">
-                              <span class="text-[8px] text-slate-600">0%</span>
-                              <span class="text-[8px] text-slate-600">100%</span>
-                            </div>
-                          `:html`
-                            <div class="py-4 text-center">
-                              <p class="text-slate-400 font-bold">No data yet</p>
-                              <p class="text-slate-500 text-[11px] mt-1">Log accuracy entries or FL scores to generate your readiness score</p>
-                            </div>`}
+                            <div class="flex justify-between mt-1"><span class="text-[8px] text-slate-600">0%</span><span class="text-[8px] text-slate-600">100%</span></div>
+                          `:html`<div class="py-4 text-center"><p class="text-slate-400 font-bold">No data yet</p><p class="text-slate-500 text-[11px] mt-1">Log accuracy entries or FL scores to generate your readiness score</p></div>`}
                         </div>
                       </div>
-
-                      <!-- Component Breakdown -->
                       <div class="p-5 space-y-4 divide-y divide-slate-100">
                         ${components.map(c=>html`
                           <div class="pt-4 first:pt-0">
@@ -1162,19 +1043,15 @@
                               <div>
                                 <div class="flex items-center gap-1.5">
                                   <span class="text-xs font-black text-slate-800">${c.label}</span>
-                                  ${c.key==='uworld'&&html`
-                                    <span class="text-[8px] font-black uppercase bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-md">calibrated</span>`}
-                                  ${c.key==='fl'&&html`
-                                    <span class="text-[8px] font-black uppercase bg-cyan-100 text-cyan-600 px-1.5 py-0.5 rounded-md">scaled</span>`}
+                                  ${c.key==='uworld'&&html`<span class="text-[8px] font-black uppercase bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-md">calibrated</span>`}
+                                  ${c.key==='fl'&&html`<span class="text-[8px] font-black uppercase bg-cyan-100 text-cyan-600 px-1.5 py-0.5 rounded-md">scaled</span>`}
                                 </div>
                                 <p class="text-[9px] font-bold text-slate-400 mt-0.5">${c.desc}</p>
                                 ${c.rawLabel&&html`<p class="text-[9px] font-black text-slate-500 mt-0.5">${c.rawLabel}</p>`}
                                 ${c.key==='uworld'&&c.rawLabel&&html`<p class="text-[9px] font-black text-indigo-600">→ AAMC-equiv: ${c.pct}%</p>`}
                               </div>
                               <div class="text-right">
-                                <span class=${"text-base font-black "+(c.pct===null?'text-slate-300':c.pct>=75?'text-emerald-600':c.pct>=60?'text-amber-500':'text-red-500')}>
-                                  ${c.pct===null?'—':c.pct+'%'}
-                                </span>
+                                <span class=${"text-base font-black "+(c.pct===null?'text-slate-300':c.pct>=75?'text-emerald-600':c.pct>=60?'text-amber-500':'text-red-500')}>${c.pct===null?'—':c.pct+'%'}</span>
                                 <p class="text-[8px] font-black uppercase text-slate-400">${Math.round(c.weight*100)}% wt</p>
                               </div>
                             </div>
@@ -1184,15 +1061,13 @@
                           </div>`)}
                       </div>
                     </div>
-
-                    <!-- Score Band Legend -->
                     <div class="glass-card p-5">
                       <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Score Band Guide</p>
                       <div class="space-y-1.5">
                         ${scoreMap.map(s=>html`
-                          <div class=${"flex items-center justify-between px-3 py-2 rounded-xl "+(pred?.band===s.band?'bg-indigo-50 border border-indigo-200':'bg-slate-50')}>
+                          <div class=${"flex items-center justify-between px-3 py-2 rounded-xl "+(pred&&pred.band===s.band?'bg-indigo-50 border border-indigo-200':'bg-slate-50')}>
                             <div class="flex items-center gap-2">
-                              ${pred?.band===s.band&&html`<span class="text-indigo-600 font-black text-xs">▶</span>`}
+                              ${pred&&pred.band===s.band&&html`<span class="text-indigo-600 font-black text-xs">▶</span>`}
                               <span class="text-[11px] font-black text-slate-700">${s.band}</span>
                               <span class="text-[9px] font-bold text-slate-400">readiness ≥${s.min}%</span>
                             </div>
@@ -1200,37 +1075,28 @@
                           </div>`)}
                       </div>
                     </div>
-
-                    <!-- UWorld + FL Scale Explainer -->
                     <div class="glass-card p-5 border border-indigo-100 bg-indigo-50/30">
                       <p class="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-2">Score Scaling Notes</p>
                       <p class="text-[11px] font-bold text-slate-600 leading-relaxed mb-3">
-                        <span class="font-black text-slate-800">UWorld</span> is calibrated up (×1.18 + 8) since it's harder than AAMC. 
-                        <span class="font-black text-slate-800">FL scores</span> are converted from the 472–528 MCAT scale to a 0–100% readiness scale 
-                        using <span class="font-black text-indigo-700">(composite − 472) ÷ 56</span>. The avg of your 3 most recent FLs is used.
+                        <span class="font-black text-slate-800">UWorld</span> is calibrated up (×1.18 + 8) since it's harder than AAMC.
+                        <span class="font-black text-slate-800">FL scores</span> are converted using <span class="font-black text-indigo-700">(composite − 472) ÷ 56</span>. Avg of 3 most recent FLs used.
                       </p>
                       <div class="grid grid-cols-4 gap-2">
-                        ${[[500,50],[505,59],[510,68],[515,77],[518,82],[520,86],[524,93],[528,100]].slice(0,4).map(([score,pct])=>html`
+                        ${[[500,50],[505,59],[510,68],[515,77]].map(([score,pct])=>html`
                           <div class="bg-white rounded-xl p-2 text-center border border-indigo-100">
                             <p class="text-[9px] font-black text-slate-400">FL ${score}</p>
                             <p class="text-xs font-black text-indigo-600">${pct}%</p>
                           </div>`)}
                       </div>
                     </div>
-
-                    <!-- Missing data nudges -->
                     ${missing.length>0&&html`
                       <div class="glass-card p-4 border border-amber-200 bg-amber-50/40">
-                        <p class="text-[10px] font-black uppercase text-amber-600 tracking-widest mb-2">
-                          📊 Add These For a Better Score
-                        </p>
+                        <p class="text-[10px] font-black uppercase text-amber-600 tracking-widest mb-2">📊 Add These For a Better Score</p>
                         <div class="space-y-1.5">
                           ${missing.map(c=>html`
                             <div class="flex items-center gap-2">
                               <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                              <span class="text-[11px] font-bold text-slate-600">
-                                <span class="font-black text-slate-800">${c.label}:</span> ${c.desc}
-                              </span>
+                              <span class="text-[11px] font-bold text-slate-600"><span class="font-black text-slate-800">${c.label}:</span> ${c.desc}</span>
                             </div>`)}
                         </div>
                       </div>`}
@@ -1240,7 +1106,6 @@
 
           </main>
 
-          <!-- BOTTOM NAV -->
           <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t h-20 flex items-center px-1 z-50">
             ${[
               {key:'home',label:'Home',icon:'H'},
@@ -1262,7 +1127,6 @@
         </div>`;
     };
 
-    
     render(html`<${App} />`, document.getElementById('root'));
   </script>
 </body>
