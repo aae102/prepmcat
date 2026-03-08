@@ -104,6 +104,13 @@
       const [syllabusCat, setSyllabusCat] = useState('Gen Chem');
       const [showHidden, setShowHidden] = useState(false);
       const [data, setData] = useState(DEFAULT_DATA);
+      useEffect(() => {
+  try {
+    localStorage.setItem("mcat_backup", JSON.stringify(data));
+  } catch (e) {
+    console.error("Backup failed", e);
+  }
+}, [data]);
       const [hasLoaded, setHasLoaded] = useState(false);
       const [isSyncing, setIsSyncing] = useState(false);
       const [authError, setAuthError] = useState('');
@@ -134,7 +141,7 @@
           try {
             const parsed = JSON.parse(ev.target.result);
             if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Bad format');
-            setData({ ...DEFAULT_DATA, ...parsed });
+            setData(prev => ({ ...prev, ...parsed }));
             setImportStatus('✅ Restored! Data loaded.');
             setTimeout(() => { setImportStatus(''); setShowBackup(false); }, 2000);
           } catch(_) {
@@ -160,27 +167,74 @@
           setHasLoaded(false);
           if (!u) { setUser(null); setData(DEFAULT_DATA); return; }
           setUser(u);
-          try {
-            const snap = await getDoc(doc(db, "users", u.uid));
-            if (snap.exists()) setData({ ...DEFAULT_DATA, ...snap.data() });
-            else { await setDoc(doc(db, "users", u.uid), DEFAULT_DATA, { merge: true }); setData(DEFAULT_DATA); }
-          } catch (err) { console.error(err); }
-          finally { setHasLoaded(true); }
+        try {
+  const snap = await getDoc(doc(db, "users", u.uid));
+
+  if (snap.exists()) {
+    setData({ ...DEFAULT_DATA, ...snap.data() });
+  } else {
+    const backup = localStorage.getItem("mcat_backup");
+
+    if (backup) {
+      try {
+        const parsedBackup = JSON.parse(backup);
+        setData({ ...DEFAULT_DATA, ...parsedBackup });
+      } catch (backupErr) {
+        console.error("Backup parse failed:", backupErr);
+        await setDoc(doc(db, "users", u.uid), DEFAULT_DATA, { merge: true });
+        setData(DEFAULT_DATA);
+      }
+    } else {
+      await setDoc(doc(db, "users", u.uid), DEFAULT_DATA, { merge: true });
+      setData(DEFAULT_DATA);
+    }
+  }
+} catch (err) {
+  console.error("Firestore load failed:", err);
+
+  const backup = localStorage.getItem("mcat_backup");
+  if (backup) {
+    try {
+      const parsedBackup = JSON.parse(backup);
+      setData({ ...DEFAULT_DATA, ...parsedBackup });
+    } catch (backupErr) {
+      console.error("Backup recovery failed:", backupErr);
+      setData(DEFAULT_DATA);
+    }
+  } else {
+    setData(DEFAULT_DATA);
+  }
+} finally {
+  setHasLoaded(true);
+}
         });
         return unsub;
       }, []);
 
       useEffect(() => {
-        if (!user || !hasLoaded) return;
-        setIsSyncing(true);
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(async () => {
-          try { await setDoc(doc(db, "users", user.uid), data); }
-          catch (err) { console.error(err); }
-          finally { setIsSyncing(false); }
-        }, 350);
-        return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-      }, [data, user, hasLoaded]);
+  if (!user || !hasLoaded) return;
+
+  // prevent accidental overwrite with empty default data
+  if (!data || Object.keys(data).length === 0) return;
+
+  setIsSyncing(true);
+
+  if (saveTimer.current) clearTimeout(saveTimer.current);
+
+  saveTimer.current = setTimeout(async () => {
+    try {
+      await setDoc(doc(db, "users", user.uid), data, { merge: true });
+    } catch (err) {
+      console.error("Save failed:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, 500);
+
+  return () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  };
+}, [data, user, hasLoaded]);
 
       const upsertLogItem = (date, item) => {
         setData(prev => {
@@ -1131,3 +1185,4 @@
   </script>
 </body>
 </html>
+
