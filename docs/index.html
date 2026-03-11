@@ -223,7 +223,7 @@
 
   saveTimer.current = setTimeout(async () => {
     try {
-      await setDoc(doc(db, "users", user.uid), data, { merge: true });
+      await setDoc(doc(db, "users", user.uid), data);
     } catch (err) {
       console.error("Save failed:", err);
     } finally {
