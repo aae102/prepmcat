@@ -3126,23 +3126,11 @@ function exportData(){
   URL.revokeObjectURL(url);
 }
 
-function autoExportBackup(){
+function autoBackupToLocalStorage(){
   try{
-    const json = JSON.stringify(DATA, null, 2);
-    const blob = new Blob([json], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    a.href = url;
-    a.download = `recall-autobackup-${stamp}.json`;
-
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
-    console.log("Auto backup exported:", a.download);
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(DATA));
+    localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
+    console.log("Auto backup saved silently to localStorage");
   }catch(err){
     console.error("Auto backup failed:", err);
   }
@@ -3262,7 +3250,26 @@ if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.
 }
 
 setInterval(handleDayRollover, 30000);
-setInterval(autoExportBackup, 5 * 60 * 1000);
+
+function scheduleDailyBackup(){
+  const now = new Date();
+
+  const next = new Date();
+  next.setHours(23, 59, 0, 0); // 11:59 PM
+
+  if (next <= now){
+    next.setDate(next.getDate() + 1);
+  }
+
+  const delay = next - now;
+
+  setTimeout(() => {
+    autoBackupToLocalStorage();
+    scheduleDailyBackup();
+  }, delay);
+}
+
+scheduleDailyBackup();
 render();
 </script>
 </body>
