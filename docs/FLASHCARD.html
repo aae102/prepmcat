@@ -3113,26 +3113,6 @@ const ans = (mode === "cloze") ? makeCloze(ansText).answer : ansText;
  * IMPORT / EXPORT
  ******************************************************************/
 function exportData(){
-function autoExportBackup(){
-  try{
-    const json = JSON.stringify(DATA, null, 2);
-    const blob = new Blob([json], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    const date = new Date().toISOString().replace(/[:.]/g,"-");
-    a.href = url;
-    a.download = `recall-autobackup-${date}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    URL.revokeObjectURL(url);
-    console.log("Auto backup exported.");
-  }catch(err){
-    console.error("Auto backup failed:", err);
-  }
-}
   const json = JSON.stringify(DATA, null, 2);
   const blob = new Blob([json], {type:"application/json"});
   const url  = URL.createObjectURL(blob);
@@ -3144,6 +3124,28 @@ function autoExportBackup(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function autoExportBackup(){
+  try{
+    const json = JSON.stringify(DATA, null, 2);
+    const blob = new Blob([json], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `recall-autobackup-${stamp}.json`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+    console.log("Auto backup exported:", a.download);
+  }catch(err){
+    console.error("Auto backup failed:", err);
+  }
 }
 
 function importData(file){
@@ -3260,6 +3262,7 @@ if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.
 }
 
 setInterval(handleDayRollover, 30000);
+setInterval(autoExportBackup, 5 * 60 * 1000);
 render();
 </script>
 </body>
