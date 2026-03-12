@@ -3113,6 +3113,26 @@ const ans = (mode === "cloze") ? makeCloze(ansText).answer : ansText;
  * IMPORT / EXPORT
  ******************************************************************/
 function exportData(){
+function autoExportBackup(){
+  try{
+    const json = JSON.stringify(DATA, null, 2);
+    const blob = new Blob([json], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    const date = new Date().toISOString().replace(/[:.]/g,"-");
+    a.href = url;
+    a.download = `recall-autobackup-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+    console.log("Auto backup exported.");
+  }catch(err){
+    console.error("Auto backup failed:", err);
+  }
+}
   const json = JSON.stringify(DATA, null, 2);
   const blob = new Blob([json], {type:"application/json"});
   const url  = URL.createObjectURL(blob);
