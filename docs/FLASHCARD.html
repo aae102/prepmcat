@@ -335,12 +335,8 @@ function loadData(){
 }
 function saveData(d){
   try{
-  const existing = localStorage.getItem(STORAGE_KEY);
-if (existing) {
-  localStorage.setItem(BACKUP_KEY, existing);
-}
-localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
   }catch(err){
     console.error("Save failed:", err);
   }
@@ -3129,8 +3125,7 @@ function exportData(){
 function autoBackupToLocalStorage(){
   try{
     localStorage.setItem(BACKUP_KEY, JSON.stringify(DATA));
-    localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
-    console.log("Auto backup saved silently to localStorage");
+    console.log("Daily backup saved silently to localStorage");
   }catch(err){
     console.error("Auto backup failed:", err);
   }
