@@ -635,8 +635,9 @@ function computeLearningDelayMs(label){
 /******************************************************************
  * CARD MODEL + NORMALIZE
  ******************************************************************/
-function makeCard({id, front, back, frontImage=null, backImage=null, createdAtIdx=0}){
-  return {
+function makeCard({id, front, back, frontImage=null, backImage=null, createdAtIdx=0, importedCloze=false}){
+  return {     
+    importedCloze: !!importedCloze,
     id: id || String(Date.now()),
     front: front || "",
     back: back || "",
@@ -856,7 +857,7 @@ async function clipboardImageToBase64(e){
   return null;
 }
 
-/******************************************************************
+ /******************************************************************
  * APKG (ANKI DECK) IMPORT
  ******************************************************************/
 async function importAPKG(file){
@@ -865,13 +866,14 @@ async function importAPKG(file){
   const dbEntry = zip.file("collection.anki2") || zip.file("collection.anki21");
   if (!dbEntry) throw new Error("APKG missing collection.anki2/collection.anki21");
 
-  // ---- media map: filename -> dataURL ----
   const mediaMap = {};
   const mediaEntry = zip.file("media");
+
   if (mediaEntry){
     try{
       const mediaJson = await mediaEntry.async("string");
-      const media = JSON.parse(mediaJson); // {"0":"img.png","1":"sound.mp3",...}
+      const media = JSON.parse(mediaJson);
+
       for (const key of Object.keys(media)){
         const fname = media[key];
         const f = zip.file(key);
@@ -883,91 +885,92 @@ async function importAPKG(file){
 
         const base64 = await f.async("base64");
         const mime =
-          ext==="png" ? "image/png" :
-          (ext==="jpg"||ext==="jpeg") ? "image/jpeg" :
-          ext==="webp" ? "image/webp" :
-          ext==="gif" ? "image/gif" :
-          ext==="svg" ? "image/svg+xml" :
+          ext === "png" ? "image/png" :
+          (ext === "jpg" || ext === "jpeg") ? "image/jpeg" :
+          ext === "webp" ? "image/webp" :
+          ext === "gif" ? "image/gif" :
+          ext === "svg" ? "image/svg+xml" :
           "application/octet-stream";
 
-        mediaMap[fname] = `data:${mime};base64,${base64}`;
-mediaMap[encodeURIComponent(fname)] = mediaMap[fname];
+        const dataUrl = `data:${mime};base64,${base64}`;
+        mediaMap[fname] = dataUrl;
+        mediaMap[encodeURIComponent(fname)] = dataUrl;
       }
-    }catch(e){
-      console.warn("Media parse failed:", e);
+    }catch(err){
+      console.warn("Media parse failed:", err);
     }
   }
 
-  function guessMime(filename){
-  const ext = (filename.split(".").pop() || "").toLowerCase();
-  if (ext === "png") return "image/png";
-  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-  if (ext === "gif") return "image/gif";
-  if (ext === "webp") return "image/webp";
-  if (ext === "svg") return "image/svg+xml";
-  return "application/octet-stream";
-}
-
-function arrayBufferToBase64(buf){
-  let binary = "";
-  const bytes = new Uint8Array(buf);
-  const chunkSize = 0x8000;
-  for (let i=0; i<bytes.length; i+=chunkSize){
-    binary += String.fromCharCode(...bytes.subarray(i, i+chunkSize));
+  function stripSoundTags(s){
+    return String(s || "").replace(/\[sound:[^\]]+\]/gi, "").trim();
   }
-  return btoa(binary);
-}
 
-// Replace <img src="filename"> and <source src="filename"> with data URLs if we have them.
-// Also strips [sound:...] so it doesn't show as text.
-function injectApkgMedia(html, mediaMap){
-  let s = String(html || "");
+  function resolveMedia(html){
+    let out = String(html || "");
 
-  // remove Anki sound tags from display
-  s = s.replace(/\[sound:[^\]]+\]/gi, "");
+    out = out.replace(/src\s*=\s*["']([^"']+)["']/gi, (m, src)=>{
+      let clean = String(src || "").trim();
 
-  // rewrite src="..." for non-http / non-data
-  return s.replace(/src\s*=\s*"(.*?)"/gi, (m, src)=>{
-    const clean = src.trim();
-    if (!clean) return m;
-    if (/^(https?:|data:|blob:)/i.test(clean)) return m;
+      if (/^(https?:|data:|blob:)/i.test(clean)) return m;
 
-    // Anki sometimes uses URL-encoded filenames
-    const decoded = decodeURIComponent(clean);
+      clean = clean.replace(/^\.\/+/, "").split("#")[0].split("?")[0].trim();
 
-    const dataUrl = mediaMap[decoded] || mediaMap[clean];
-    if (!dataUrl) return m;
+      let decoded = clean;
+      try { decoded = decodeURIComponent(clean); } catch {}
 
-    return `src="${dataUrl}"`;
-  });
-}
+      const dataUrl = mediaMap[decoded] || mediaMap[clean];
+      if (dataUrl) return `src="${dataUrl}"`;
 
-function resolveMedia(html){
-  let out = String(html || "");
+      return m;
+    });
 
-  out = out.replace(/src\s*=\s*["']([^"']+)["']/gi, (m, src)=>{
-    let clean = String(src || "").trim();
+    out = out.replace(/\[sound:[^\]]+\]/gi, "");
+    return out;
+  }
 
-    // ignore already-resolved URLs
-    if (/^(https?:|data:|blob:)/i.test(clean)) return m;
+  function stripHtmlToText(html){
+    const div = document.createElement("div");
+    div.innerHTML = String(html || "");
+    return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+  }
 
-    // remove ./ and any query/hash junk
-    clean = clean.replace(/^\.\/+/, "").split("#")[0].split("?")[0].trim();
+  function isMostlyImageField(html){
+    const s = String(html || "").trim();
+    if (!s) return false;
 
-    // try both raw + decoded (APKG often uses %20 etc)
-    let decoded = clean;
-    try { decoded = decodeURIComponent(clean); } catch {}
+    const textOnly = stripHtmlToText(s);
+    if (textOnly) return false;
 
-    const dataUrl = mediaMap[decoded] || mediaMap[clean];
-    if (dataUrl) return `src="${dataUrl}"`;
+    return /<img\b|<svg\b|data:image/i.test(s);
+  }
 
-    return m;
-  });
+  function looksLikeMetaField(fieldName, html){
+    const n = String(fieldName || "").toLowerCase().trim();
+    const text = stripHtmlToText(html).toLowerCase();
 
-  // remove [sound:...] tokens so they don't appear as text
-  out = out.replace(/\[sound:[^\]]+\]/gi, "");
-  return out;
-}
+    if (!html || !String(html).trim()) return true;
+
+    if ([
+      "thumbnail","image","img","picture","pic",
+      "link","url","source",
+      "tags","tag",
+      "personal notes","missed questions","one by one"
+    ].includes(n)) return true;
+
+    if (isMostlyImageField(html)) return true;
+    if (/^(https?:\/\/|www\.)/i.test(text)) return true;
+
+    return false;
+  }
+
+  function extractFirstClozeAnswer(text){
+    const m = String(text || "").match(/\{\{c\d+::(.*?)(?:::(.*?))?\}\}/i);
+    return m ? m[1].trim() : "";
+  }
+
+  function renderClozePrompt(text){
+    return String(text || "").replace(/\{\{c\d+::(.*?)(?:::(.*?))?\}\}/gi, "_____");
+  }
 
   const dbFile = await dbEntry.async("arraybuffer");
 
@@ -977,25 +980,86 @@ function resolveMedia(html){
 
   const db = new SQL.Database(new Uint8Array(dbFile));
 
-  const res = db.exec("SELECT flds FROM notes");
+  let modelsById = {};
+  const notesRes = db.exec("SELECT id, mid, flds FROM notes");
+  const colRes = db.exec("SELECT models FROM col");
   const cards = [];
 
-  if (!res?.[0]?.values) return cards;
+  if (colRes?.[0]?.values?.[0]?.[0]){
+    try{
+      modelsById = JSON.parse(colRes[0].values[0][0]);
+    }catch(err){
+      console.warn("Could not parse Anki models:", err);
+    }
+  }
 
-  for (const row of res[0].values){
-    const flds = String(row[0] ?? "");
-    const fields = flds.split("\x1f");
+  if (!notesRes?.[0]?.values?.length){
+    return cards;
+  }
 
-    // IMPORTANT: keep HTML in these fields
-    const front = resolveMedia((fields[0] ?? "").trim());
-    const back  = resolveMedia((fields[1] ?? "").trim());
+  for (const row of notesRes[0].values){
+    const midRaw = row[1];
+    const flds = String(row[2] ?? "");
+    const fields = flds.split("\x1f").map(x => resolveMedia(stripSoundTags(x)));
 
-    if (front || back) cards.push({ front, back });
+    const model = modelsById[String(midRaw)] || modelsById[midRaw];
+    const fieldDefs = Array.isArray(model?.flds) ? model.flds : [];
+    const modelType = Number(model?.type ?? 0);
+    const modelName = String(model?.name || "").toLowerCase();
+
+    const namedFields = fields.map((value, i) => ({
+      index: i,
+      name: fieldDefs[i]?.name || `Field ${i + 1}`,
+      value
+    }));
+
+    // CLOZE NOTES
+    if (modelType === 1 || modelName.includes("cloze") || fields.some(v => /\{\{c\d+::/.test(v))){
+      const textField =
+        namedFields.find(f => String(f.name).toLowerCase() === "text") ||
+        namedFields.find(f => /\{\{c\d+::/.test(f.value)) ||
+        namedFields[0];
+
+      if (!textField || !textField.value) continue;
+
+      const extraField =
+        namedFields.find(f => String(f.name).toLowerCase() === "extra") ||
+        namedFields.find(f => !looksLikeMetaField(f.name, f.value) && f.index !== textField.index);
+
+      const originalText = textField.value;
+      const question = renderClozePrompt(originalText);
+      const answer = extractFirstClozeAnswer(originalText);
+
+      let back = answer;
+      if (extraField?.value && !looksLikeMetaField(extraField.name, extraField.value)){
+        back += `<br><br>${extraField.value}`;
+      }
+
+      if (question && back){
+       cards.push({
+  front: question,
+  back,
+  importedCloze: true
+});
+      }
+
+      continue;
+    }
+
+    // BASIC / OTHER NOTES
+    const usableFields = namedFields.filter(f => !looksLikeMetaField(f.name, f.value));
+    if (!usableFields.length) continue;
+
+    const front = usableFields[0]?.value?.trim() || "";
+    const back = usableFields[1]?.value?.trim() || "";
+
+    if (front || back){
+      cards.push({ front, back });
+    }
   }
 
   return cards;
 }
-
 /******************************************************************
  * APKG EXPORT
  ******************************************************************/
@@ -1385,6 +1449,8 @@ function cardsFromLinesLineByLine(lines){
 function parseCardsFromTextSmart(text){
   const lines = text.split(/\n/).map(l=>l.trim()).filter(Boolean);
   if (!lines.length) return [];
+
+  // Tab-separated (highest priority)
   const tabCards = [];
   for (const line of lines){
     const parts = line.split(/\t/);
@@ -1395,32 +1461,45 @@ function parseCardsFromTextSmart(text){
     }
   }
   if (tabCards.length >= Math.floor(lines.length * 0.6)) return tabCards;
-  const qaPattern = /^(?:Q(?:uestion)?[\s:.)\-]+)(.+)/i;
-  const ansPattern = /^(?:A(?:nswer)?[\s:.)\-]+)(.+)/i;
+
+  // Q: / A: pattern — handles blank-line-separated blocks
+  const qaPattern = /^Q\s*[:.)]\s*(.+)/i;
+  const ansPattern = /^A\s*[:.)]\s*(.+)/i;
   const qaCards = [];
+  const allLines = text.split(/\n/).map(l=>l.trim()); // keep blanks for block detection
   let i = 0;
-  while (i < lines.length){
-    const qm = lines[i].match(qaPattern);
+  while (i < allLines.length){
+    const qm = allLines[i].match(qaPattern);
     if (qm){
       let front = qm[1];
       let back = "";
       i++;
-      while (i < lines.length){
-        const am = lines[i].match(ansPattern);
-        if (am){ back = am[1]; i++; break; }
-        else if (lines[i].match(qaPattern)) break;
-        else { front += " " + lines[i]; i++; }
+      // collect continuation lines for Q (until A: or blank)
+      while (i < allLines.length && !allLines[i].match(ansPattern) && !allLines[i].match(qaPattern)){
+        if (allLines[i] === "") { i++; continue; }
+        front += " " + allLines[i];
+        i++;
+      }
+      const am = allLines[i]?.match(ansPattern);
+      if (am){ back = am[1]; i++; }
+      // collect continuation lines for A
+      while (i < allLines.length && !allLines[i].match(qaPattern) && allLines[i] !== ""){
+        back += " " + allLines[i];
+        i++;
       }
       if (front && back) qaCards.push({front: front.trim(), back: back.trim()});
     } else { i++; }
   }
   if (qaCards.length > 0) return qaCards;
+
+  // Separator-based
   const sepCards = [];
   for (const line of lines){
     const m = line.match(/^(.{3,}?)\s*(?:\t| - | \| |: )\s*(.+)$/);
     if (m) sepCards.push({front: m[1].trim(), back: m[2].trim()});
   }
   if (sepCards.length >= Math.floor(lines.length * 0.5)) return sepCards;
+
   return cardsFromLinesLineByLine(lines);
 }
 
@@ -2232,7 +2311,8 @@ function bindAdd(){
         id: `${Date.now()}_${i}`,
         front: c.front,
         back: c.back,
-        createdAtIdx: i
+        createdAtIdx: i,
+        importedCloze: !!c.importedCloze
       }));
       const deckId = `deck_${Date.now()}`;
       const order = deckOrderSel.value;
@@ -3229,8 +3309,12 @@ function bindStudy(){
     else frontImg.style.display="none";
 
  if (mode === "cloze"){
-  const cl = makeCloze(htmlToText(card.back));
-  qtext.textContent = cl.clozeText;
+  if (card.importedCloze){
+    qtext.innerHTML = formatCardHTML(card.front);
+  } else {
+    const cl = makeCloze(htmlToText(card.back));
+    qtext.textContent = cl.clozeText;
+  }
 } else {
   qtext.innerHTML = formatCardHTML(card.front);
 }
@@ -3310,7 +3394,9 @@ function bindStudy(){
     if (!input) return;
     st.input = input;
     const ansText = htmlToText(card.back);
-const ans = (mode === "cloze") ? makeCloze(ansText).answer : ansText;
+    const ans = (mode === "cloze" && !card.importedCloze)
+      ? makeCloze(ansText).answer
+      : ansText;
     st.result = checkAnswer(input, ans);
     st.phase = "revealed";
     refresh();
@@ -3475,7 +3561,19 @@ const ans = (mode === "cloze") ? makeCloze(ansText).answer : ansText;
   window.addEventListener("keydown", window.__studyKeyHandler);
 
   pickNextActive();
-  window.__studyInterval = setInterval(()=>{ refresh(); }, 800);
+  // Only update the timer text — no full re-render every tick
+  window.__studyInterval = setInterval(()=>{
+    const timerEl = document.getElementById("stimer");
+    if (timerEl && st.sessionStartedAt){
+      const sec = Math.floor((nowMs() - st.sessionStartedAt)/1000);
+      timerEl.textContent = `${String(Math.floor(sec/60)).padStart(2,"0")}:${String(sec%60).padStart(2,"0")}`;
+    }
+    // Also drain learning queue when cards become due
+    if (st && st.learning?.length){
+      const hasDue = st.learning.some(x => x.dueTimeMs <= nowMs());
+      if (hasDue) refresh();
+    }
+  }, 1000);
   refresh();
 }
 
@@ -3619,7 +3717,7 @@ if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.
   }
 }
 
-setInterval(handleDayRollover, 30000);
+setInterval(handleDayRollover, 300000); // check every 5 min instead of 30s
 render();
 </script>
 </body>
