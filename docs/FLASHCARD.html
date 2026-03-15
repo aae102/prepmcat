@@ -2394,39 +2394,49 @@ function rateWithLabel(label, quality){
   });
 
   window.__studyKeyHandler = (e)=>{
-    if (SCREEN !== "study") return;
+  if (SCREEN !== "study") return;
 
-    const isTypingField =
-      e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT");
+  const card = currentCard();
+  if (!card) return;
 
-    const card = currentCard();
-    if (!card) return;
+  const typingInAnswer =
+    document.activeElement === ansInput ||
+    e.target === ansInput ||
+    e.target?.tagName === "INPUT" ||
+    e.target?.tagName === "TEXTAREA" ||
+    e.target?.isContentEditable;
 
-    if (e.key.toLowerCase() === "s"){
+  // NEVER run global shortcuts while typing in the answer box
+  if (typingInAnswer) {
+    if (e.key === "Enter") {
       e.preventDefault();
-      updateData(d=>{
-        const c = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
-        if (c) c.starred = !c.starred;
-      });
-      st.sess.starred += 1;
-      refresh();
-      return;
+      doCheckTyped();
     }
+    return;
+  }
 
-    if (e.code === "Space" && !isTypingField){
-      e.preventDefault();
-      if (st.phase === "question") revealAnswerNeutral();
-      return;
-    }
+  if (e.key.toLowerCase() === "s"){
+    e.preventDefault();
+    updateData(d=>{
+      const c = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
+      if (c) c.starred = !c.starred;
+    });
+    st.sess.starred += 1;
+    refresh();
+    return;
+  }
 
-    if (st.phase === "revealed"){
-      if (e.key === "1") { e.preventDefault(); rateWithLabel("again", 0); return; }
-      if (e.key === "2") { e.preventDefault(); rateWithLabel("hard", 1); return; }
-      if (e.key === "3") { e.preventDefault(); rateWithLabel("good", 3); return; }
-      if (e.key === "4") { e.preventDefault(); rateWithLabel("easy", 4); return; }
-      if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
-    }
-  };
+  if (e.code === "Space"){
+    e.preventDefault();
+    if (st.phase === "question") revealAnswerNeutral();
+    return;
+  }
+
+  if (st.phase === "revealed"){
+    if (e.key === "1") { e.preventDefault(); rateWithLabel("again", 0); return; }
+    if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
+  }
+};
 
   window.addEventListener("keydown", window.__studyKeyHandler);
 
