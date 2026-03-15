@@ -17,8 +17,6 @@
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.3/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
 
   <style>
     :root{
@@ -40,11 +38,10 @@
     .mobile-nav button.active{color:var(--purple)}
     .mobile-nav button .micon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
     .mobile-nav button.active .micon{background:rgba(129,140,248,.15)}
-    @media(max-width:768px){
-      .sidebar{display:none !important}
-      .mobile-nav{display:flex !important}
-      .app{display:block !important}
-      .main{padding:14px 12px 90px;width:100% !important;max-width:100vw;overflow-x:hidden}
+    @media(max-width:640px){
+      .sidebar{display:none}
+      .mobile-nav{display:flex}
+      .main{padding:14px 12px 90px}
       .studyWrap{padding:12px 10px}
       .flash{padding:20px 12px;min-height:130px}
       .q{font-size:16px}
@@ -57,8 +54,6 @@
       .studyTop{gap:8px}
       .row{flex-wrap:wrap}
       .stat{min-width:calc(50% - 5px)}
-      .progressCard .row{flex-direction:column}
-      .card{width:100%}
     }
 
     .app{display:flex;min-height:100vh}
@@ -238,34 +233,6 @@
       transition:opacity .2s;
     }
     .startCustomBtn:disabled{opacity:.35;cursor:default}
-
-        .modalBack{
-      position:fixed; inset:0; background:rgba(0,0,0,.6);
-      display:flex; align-items:center; justify-content:center;
-      padding:18px; z-index:300;
-    }
-    .modalCard{
-      width:min(760px,100%); max-height:90vh; overflow:auto;
-      background:var(--panel); border:1px solid var(--border);
-      border-radius:18px; padding:18px;
-      box-shadow:0 20px 80px rgba(0,0,0,.45);
-    }
-    .modalHead{
-      display:flex; justify-content:space-between; align-items:center;
-      gap:10px; flex-wrap:wrap; margin-bottom:12px;
-    }
-    .modalTitle{
-      font-size:18px; font-weight:900;
-    }
-    .editGrid{
-      display:grid; gap:12px;
-    }
-    .editSection{
-      background:var(--panel2);
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:12px;
-    }
   </style>
 </head>
 
@@ -277,27 +244,20 @@
  * STORAGE + SETTINGS
  ******************************************************************/
 const STORAGE_KEY = "recall_full_final_v1";
-const BACKUP_KEY = STORAGE_KEY + "_backup";
-const LAST_SAVED_KEY = STORAGE_KEY + "_lastSavedAt";
 const DEFAULT_DAILY_GOAL = 150;
 
-const DATA_VERSION = 1;
-
 const INIT = {
-  version: DATA_VERSION,
   decks:{},
   stats:{},
- settings:{
-  appStartDate:null,
-  mutedDecksByDay:{},
-  dailyGoal: DEFAULT_DAILY_GOAL,
-  studyMode: "mixed_random",
-  strictness: "balanced",
-  masteredReviewPerDay: 15,
-  masteredHandling: "mix",
-  perDeckNewQuota: {},
-  perDeckReviewQuota: {}
-}
+  settings:{
+    appStartDate:null,
+    mutedDecksByDay:{},
+    dailyGoal: DEFAULT_DAILY_GOAL,
+    studyMode: "mixed_random",
+    strictness: "balanced",
+    masteredReviewPerDay: 15,
+    masteredHandling: "mix"
+  }
 };
 
 let DATA = loadData();
@@ -313,33 +273,14 @@ let CUSTOM_SHUFFLE       = true;
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return normalizeData(structuredClone(INIT));
-
-    const parsed = JSON.parse(raw);
+    const parsed = raw ? JSON.parse(raw) : structuredClone(INIT);
     return normalizeData(parsed);
-  }catch(err){
-    console.error("Primary data load failed:", err);
-
-    try{
-      const backupRaw = localStorage.getItem(BACKUP_KEY);
-      if (backupRaw){
-        const backupParsed = JSON.parse(backupRaw);
-        return normalizeData(backupParsed);
-      }
-    }catch(backupErr){
-      console.error("Backup load failed:", backupErr);
-    }
-
+  }catch{
     return normalizeData(structuredClone(INIT));
   }
 }
 function saveData(d){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-    localStorage.setItem(LAST_SAVED_KEY, new Date().toISOString());
-  }catch(err){
-    console.error("Save failed:", err);
-  }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }catch{}
 }
 function updateData(mutator){
   const next = structuredClone(DATA);
@@ -400,10 +341,6 @@ function todayStr(){ return localDateStr(new Date()); }
 function nowMs(){ return Date.now(); }
 
 function normalizeData(d){
-  if (!d || typeof d !== "object") d = structuredClone(INIT);
-
-  if (!d.version) d.version = DATA_VERSION;
-
   if (!d.settings) d.settings = structuredClone(INIT.settings);
   if (!d.settings.appStartDate) d.settings.appStartDate = todayStr();
   if (!d.settings.mutedDecksByDay) d.settings.mutedDecksByDay = {};
@@ -412,18 +349,11 @@ function normalizeData(d){
   if (!d.settings.strictness) d.settings.strictness = "balanced";
   if (d.settings.masteredReviewPerDay == null) d.settings.masteredReviewPerDay = 15;
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
-  if (!d.settings.perDeckNewQuota) d.settings.perDeckNewQuota = {};
-  if (!d.settings.perDeckReviewQuota) d.settings.perDeckReviewQuota = {};
-
-  if (!d.decks || typeof d.decks !== "object") d.decks = {};
-  if (!d.stats || typeof d.stats !== "object") d.stats = {};
-
+  if (!d.decks) d.decks = {};
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
-    if (!Array.isArray(deck.cards)) deck.cards = [];
-    deck.cards = deck.cards.map(c=>normalizeCard(c));
+    deck.cards = (deck.cards||[]).map(c=>normalizeCard(c));
   }
-
   return d;
 }
 
@@ -443,57 +373,19 @@ function isMasteredDue(card){
  * SM-2
  ******************************************************************/
 function sm2(card, quality){
-  let interval = Number(card.interval ?? 0);
-  let easeFactor = Number(card.easeFactor ?? 2.5);
-  let repetitions = Number(card.repetitions ?? 0);
-
-  // quality:
-  // 0 = Again
-  // 1 = Hard
-  // 3 = Good
-  // 4 = Easy
-  // 5 = Mastered
-
-  if (quality === 0){ // Again
-    repetitions = 0;
-    interval = 1;
-    easeFactor = Math.max(1.3, easeFactor - 0.2);
-  } else if (quality === 1){ // Hard
-    repetitions = Math.max(0, repetitions);
-    interval = Math.max(2, Math.round(interval * 1.2) || 2);
-    easeFactor = Math.max(1.3, easeFactor - 0.15);
-  } else if (quality === 3){ // Good
+  let {interval=1, easeFactor=2.5, repetitions=0} = card;
+  if (quality < 3){ repetitions = 0; interval = 1; }
+  else{
     if (repetitions === 0) interval = 1;
-    else if (repetitions === 1) interval = 3;
-    else if (repetitions === 2) interval = 7;
-    else interval = Math.max(interval + 1, Math.round(interval * easeFactor));
+    else if (repetitions === 1) interval = 6;
+    else interval = Math.round(interval * easeFactor);
     repetitions++;
-  } else if (quality === 4){ // Easy
-    if (repetitions === 0) interval = 4;
-    else if (repetitions === 1) interval = 8;
-    else if (repetitions === 2) interval = 14;
-    else interval = Math.max(interval + 2, Math.round(interval * (easeFactor + 0.25)));
-    repetitions++;
-    easeFactor = Math.max(1.3, easeFactor + 0.15);
-  } else if (quality === 5){ // Mastered
-    repetitions = Math.max(3, repetitions + 1);
-    interval = Math.max(14, Math.round(Math.max(interval, 7) * (easeFactor + 0.5)));
-    easeFactor = Math.max(1.3, easeFactor + 0.2);
   }
-
+  easeFactor = Math.max(1.3, easeFactor + 0.1 - (5-quality) * (0.08 + (5-quality)*0.02));
   const nr = new Date();
   nr.setDate(nr.getDate() + interval);
-
   const mastered = quality === 5 ? true : (quality < 3 ? false : card.mastered);
-
-  return {
-    ...card,
-    interval,
-    easeFactor,
-    repetitions,
-    nextReview: nr.toISOString(),
-    mastered
-  };
+  return {...card, interval, easeFactor, repetitions, nextReview: nr.toISOString(), mastered};
 }
 
 /******************************************************************
@@ -635,9 +527,8 @@ function computeLearningDelayMs(label){
 /******************************************************************
  * CARD MODEL + NORMALIZE
  ******************************************************************/
-function makeCard({id, front, back, frontImage=null, backImage=null, createdAtIdx=0, importedCloze=false}){
-  return {     
-    importedCloze: !!importedCloze,
+function makeCard({id, front, back, frontImage=null, backImage=null, createdAtIdx=0}){
+  return {
     id: id || String(Date.now()),
     front: front || "",
     back: back || "",
@@ -729,61 +620,35 @@ function buildDailyQueue(decks, limit){
     const unseen   = cards.filter(c=>!c.mastered && !c.inWrongDeck && (c.seenCount||0)===0);
     const mastered = cards.filter(c=>isMasteredDue(c));
 
-   const reviewQuotas = DATA.settings?.perDeckReviewQuota || {};
-
-wrongByDeck[id] = deckOrderCards(deck, wrong);
-
-// due review cap per deck
-const dueOrdered = deckOrderCards(deck, due);
-const dueCap = Number(reviewQuotas[id] ?? dueOrdered.length);
-dueByDeck[id] = dueOrdered.slice(0, Math.max(0, dueCap));
-
-unseenByDeck[id]   = deckOrderCards(deck, unseen);
-masteredByDeck[id] = deckOrderCards(deck, mastered);
+    wrongByDeck[id]    = deckOrderCards(deck, wrong);
+    dueByDeck[id]      = deckOrderCards(deck, due);
+    unseenByDeck[id]   = deckOrderCards(deck, unseen);
+    masteredByDeck[id] = deckOrderCards(deck, mastered);
   }
 
   const wrongQueue   = interleaveBuckets(wrongByDeck);
   const dueQueue     = interleaveBuckets(dueByDeck);
   const masteredCap   = getMasteredReviewPerDay();
   const masteredQueue = interleaveBuckets(masteredByDeck).slice(0, masteredCap);
- const newSlots = Math.max(0, limit - wrongQueue.length - dueQueue.length - masteredQueue.length);
-const cappedByDeck = {};
-let remaining = newSlots;
+  const newSlots      = Math.max(0, limit - wrongQueue.length - dueQueue.length - masteredQueue.length);
+  const cappedByDeck  = {};
 
-// 1) Quota pass (use user-specified quotas first)
-if (remaining > 0){
-  const quotas = DATA.settings?.perDeckNewQuota || {};
-  for (const deckId of Object.keys(unseenByDeck)){
-    if (remaining <= 0) break;
-    const q = Number(quotas[deckId] ?? 0);
-    if (!q) continue;
-    const give = Math.min(q, unseenByDeck[deckId].length, remaining);
-    if (give > 0){
-      cappedByDeck[deckId] = (cappedByDeck[deckId] || 0) + give;
-      remaining -= give;
+  if (newSlots > 0){
+    const activeIds = Object.keys(unseenByDeck).filter(id => unseenByDeck[id].length > 0);
+    let remaining   = newSlots;
+    let pool        = [...activeIds];
+    for (let pass = 0; pass < 5 && pool.length > 0 && remaining > 0; pass++){
+      const perDeck = Math.ceil(remaining / pool.length);
+      const nextPool = [];
+      for (const id of pool){
+        const give = Math.min(perDeck, unseenByDeck[id].length, remaining);
+        cappedByDeck[id] = (cappedByDeck[id] || 0) + give;
+        remaining -= give;
+        if (unseenByDeck[id].length > cappedByDeck[id]) nextPool.push(id);
+      }
+      pool = nextPool;
     }
   }
-}
-
-// 2) Fill remainder fairly across any decks still having unseen cards
-if (remaining > 0){
-  const activeIds = Object.keys(unseenByDeck).filter(id => unseenByDeck[id].length > (cappedByDeck[id] || 0));
-  let pool = [...activeIds];
-  for (let pass = 0; pass < 6 && pool.length > 0 && remaining > 0; pass++){
-    const perDeck = Math.ceil(remaining / pool.length);
-    const nextPool = [];
-    for (const id of pool){
-      const have = unseenByDeck[id].length - (cappedByDeck[id] || 0);
-      if (have <= 0) continue;
-      const give = Math.min(perDeck, have, remaining);
-      cappedByDeck[id] = (cappedByDeck[id] || 0) + give;
-      remaining -= give;
-      if (unseenByDeck[id].length > (cappedByDeck[id] || 0)) nextPool.push(id);
-      if (remaining <= 0) break;
-    }
-    pool = nextPool;
-  }
-}
 
   const slicedByDeck = {};
   for (const [id, count] of Object.entries(cappedByDeck)){
@@ -842,577 +707,20 @@ function fileToBase64(file){
   });
 }
 async function clipboardImageToBase64(e){
-  const data = e.clipboardData;
-  const items = data?.items || [];
+  const items = e.clipboardData?.items || [];
   for (const it of items){
     if (it.type && it.type.startsWith("image/")){
-      const file = it.getAsFile?.();
-      if (file) return await fileToBase64(file);
+      const file = it.getAsFile();
+      if (!file) continue;
+      return await fileToBase64(file);
     }
-  }
-  const files = data?.files || [];
-  for (const file of files){
-    if (file?.type?.startsWith("image/")) return await fileToBase64(file);
   }
   return null;
 }
 
- /******************************************************************
- * APKG (ANKI DECK) IMPORT
- ******************************************************************/
-async function importAPKG(file){
-  const zip = await JSZip.loadAsync(file);
-
-  const dbEntry = zip.file("collection.anki2") || zip.file("collection.anki21");
-  if (!dbEntry) throw new Error("APKG missing collection.anki2/collection.anki21");
-
-  const mediaMap = {};
-  const mediaEntry = zip.file("media");
-
-  if (mediaEntry){
-    try{
-      const mediaJson = await mediaEntry.async("string");
-      const media = JSON.parse(mediaJson);
-
-      for (const key of Object.keys(media)){
-        const fname = media[key];
-        const f = zip.file(key);
-        if (!f) continue;
-
-        const ext = (fname.split(".").pop() || "").toLowerCase();
-        const isImg = ["png","jpg","jpeg","webp","gif","svg"].includes(ext);
-        if (!isImg) continue;
-
-        const base64 = await f.async("base64");
-        const mime =
-          ext === "png" ? "image/png" :
-          (ext === "jpg" || ext === "jpeg") ? "image/jpeg" :
-          ext === "webp" ? "image/webp" :
-          ext === "gif" ? "image/gif" :
-          ext === "svg" ? "image/svg+xml" :
-          "application/octet-stream";
-
-        const dataUrl = `data:${mime};base64,${base64}`;
-        mediaMap[fname] = dataUrl;
-        mediaMap[encodeURIComponent(fname)] = dataUrl;
-      }
-    }catch(err){
-      console.warn("Media parse failed:", err);
-    }
-  }
-
-  function stripSoundTags(s){
-    return String(s || "").replace(/\[sound:[^\]]+\]/gi, "").trim();
-  }
-
-  function resolveMedia(html){
-    let out = String(html || "");
-
-    out = out.replace(/src\s*=\s*["']([^"']+)["']/gi, (m, src)=>{
-      let clean = String(src || "").trim();
-
-      if (/^(https?:|data:|blob:)/i.test(clean)) return m;
-
-      clean = clean.replace(/^\.\/+/, "").split("#")[0].split("?")[0].trim();
-
-      let decoded = clean;
-      try { decoded = decodeURIComponent(clean); } catch {}
-
-      const dataUrl = mediaMap[decoded] || mediaMap[clean];
-      if (dataUrl) return `src="${dataUrl}"`;
-
-      return m;
-    });
-
-    out = out.replace(/\[sound:[^\]]+\]/gi, "");
-    return out;
-  }
-
-  function stripHtmlToText(html){
-    const div = document.createElement("div");
-    div.innerHTML = String(html || "");
-    return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
-  }
-
-  function isMostlyImageField(html){
-    const s = String(html || "").trim();
-    if (!s) return false;
-
-    const textOnly = stripHtmlToText(s);
-    if (textOnly) return false;
-
-    return /<img\b|<svg\b|data:image/i.test(s);
-  }
-
-  function looksLikeMetaField(fieldName, html){
-    const n = String(fieldName || "").toLowerCase().trim();
-    const text = stripHtmlToText(html).toLowerCase();
-
-    if (!html || !String(html).trim()) return true;
-
-    if ([
-      "thumbnail","image","img","picture","pic",
-      "link","url","source",
-      "tags","tag",
-      "personal notes","missed questions","one by one"
-    ].includes(n)) return true;
-
-    if (isMostlyImageField(html)) return true;
-    if (/^(https?:\/\/|www\.)/i.test(text)) return true;
-
-    return false;
-  }
-
-  function extractFirstClozeAnswer(text){
-    const m = String(text || "").match(/\{\{c\d+::(.*?)(?:::(.*?))?\}\}/i);
-    return m ? m[1].trim() : "";
-  }
-
-  function renderClozePrompt(text){
-    return String(text || "").replace(/\{\{c\d+::(.*?)(?:::(.*?))?\}\}/gi, "_____");
-  }
-
-  const dbFile = await dbEntry.async("arraybuffer");
-
-  const SQL = await initSqlJs({
-    locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
-  });
-
-  const db = new SQL.Database(new Uint8Array(dbFile));
-
-  let modelsById = {};
-  const notesRes = db.exec("SELECT id, mid, flds FROM notes");
-  const colRes = db.exec("SELECT models FROM col");
-  const cards = [];
-
-  if (colRes?.[0]?.values?.[0]?.[0]){
-    try{
-      modelsById = JSON.parse(colRes[0].values[0][0]);
-    }catch(err){
-      console.warn("Could not parse Anki models:", err);
-    }
-  }
-
-  if (!notesRes?.[0]?.values?.length){
-    return cards;
-  }
-
-  for (const row of notesRes[0].values){
-    const midRaw = row[1];
-    const flds = String(row[2] ?? "");
-    const fields = flds.split("\x1f").map(x => resolveMedia(stripSoundTags(x)));
-
-    const model = modelsById[String(midRaw)] || modelsById[midRaw];
-    const fieldDefs = Array.isArray(model?.flds) ? model.flds : [];
-    const modelType = Number(model?.type ?? 0);
-    const modelName = String(model?.name || "").toLowerCase();
-
-    const namedFields = fields.map((value, i) => ({
-      index: i,
-      name: fieldDefs[i]?.name || `Field ${i + 1}`,
-      value
-    }));
-
-    // CLOZE NOTES
-    if (modelType === 1 || modelName.includes("cloze") || fields.some(v => /\{\{c\d+::/.test(v))){
-      const textField =
-        namedFields.find(f => String(f.name).toLowerCase() === "text") ||
-        namedFields.find(f => /\{\{c\d+::/.test(f.value)) ||
-        namedFields[0];
-
-      if (!textField || !textField.value) continue;
-
-      const extraField =
-        namedFields.find(f => String(f.name).toLowerCase() === "extra") ||
-        namedFields.find(f => !looksLikeMetaField(f.name, f.value) && f.index !== textField.index);
-
-      const originalText = textField.value;
-      const question = renderClozePrompt(originalText);
-      const answer = extractFirstClozeAnswer(originalText);
-
-      let back = answer;
-      if (extraField?.value && !looksLikeMetaField(extraField.name, extraField.value)){
-        back += `<br><br>${extraField.value}`;
-      }
-
-      if (question && back){
-       cards.push({
-  front: question,
-  back,
-  importedCloze: true
-});
-      }
-
-      continue;
-    }
-
-    // BASIC / OTHER NOTES
-    const usableFields = namedFields.filter(f => !looksLikeMetaField(f.name, f.value));
-    if (!usableFields.length) continue;
-
-    const front = usableFields[0]?.value?.trim() || "";
-    const back = usableFields[1]?.value?.trim() || "";
-
-    if (front || back){
-      cards.push({ front, back });
-    }
-  }
-
-  return cards;
-}
 /******************************************************************
- * APKG EXPORT
+ * PDF + TEXT + SPREADSHEET EXTRACTION
  ******************************************************************/
-function randomInt(){
-  return Math.floor(Math.random() * 1e10);
-}
-
-function ankiTimestampSecs(){
-  return Math.floor(Date.now() / 1000);
-}
-
-function escapeSql(str){
-  return String(str || "").replace(/'/g, "''");
-}
-
-function stripHtmlToText(html){
-  const div = document.createElement("div");
-  div.innerHTML = String(html || "");
-  return div.textContent || div.innerText || "";
-}
-
-function cardToAnkiNote(card){
-  const frontHtml = normalizeCardHTML(card.front || "");
-  const backHtml  = normalizeCardHTML(card.back || "");
-
-  const frontText = stripHtmlToText(frontHtml).trim();
-  const backText  = stripHtmlToText(backHtml).trim();
-
-  const hasClozeSyntax = /\{\{c\d+::.+?\}\}/i.test(frontHtml) || /\{\{c\d+::.+?\}\}/i.test(backHtml);
-
-  if (hasClozeSyntax){
-    return {
-      type: "cloze",
-      sfld: stripHtmlToText(frontHtml),
-      flds: [
-        frontHtml || backHtml,
-        backHtml || ""
-      ]
-    };
-  }
-
-  return {
-    type: "basic",
-    sfld: frontText,
-    flds: [frontHtml, backHtml]
-  };
-}
-
-async function exportDeckAsApkg(deckId){
-  const deck = DATA.decks[deckId];
-  if (!deck) throw new Error("Deck not found");
-
-  const SQL = await initSqlJs({
-    locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}`
-  });
-
-  const db = new SQL.Database();
-
-  db.run(`
-    CREATE TABLE col (
-      id integer primary key,
-      crt integer not null,
-      mod integer not null,
-      scm integer not null,
-      ver integer not null,
-      dty integer not null,
-      usn integer not null,
-      ls integer not null,
-      conf text not null,
-      models text not null,
-      decks text not null,
-      dconf text not null,
-      tags text not null
-    );
-  `);
-
-  db.run(`
-    CREATE TABLE notes (
-      id integer primary key,
-      guid text not null,
-      mid integer not null,
-      mod integer not null,
-      usn integer not null,
-      tags text not null,
-      flds text not null,
-      sfld integer not null,
-      csum integer not null,
-      flags integer not null,
-      data text not null
-    );
-  `);
-
-  db.run(`
-    CREATE TABLE cards (
-      id integer primary key,
-      nid integer not null,
-      did integer not null,
-      ord integer not null,
-      mod integer not null,
-      usn integer not null,
-      type integer not null,
-      queue integer not null,
-      due integer not null,
-      ivl integer not null,
-      factor integer not null,
-      reps integer not null,
-      lapses integer not null,
-      left integer not null,
-      odue integer not null,
-      odid integer not null,
-      flags integer not null,
-      data text not null
-    );
-  `);
-
-  db.run(`
-    CREATE TABLE revlog (
-      id integer primary key,
-      cid integer not null,
-      usn integer not null,
-      ease integer not null,
-      ivl integer not null,
-      lastIvl integer not null,
-      factor integer not null,
-      time integer not null,
-      type integer not null
-    );
-  `);
-
-  const nowSecs = ankiTimestampSecs();
-  const nowMs = Date.now();
-
-  const deckIdNum = nowMs;
-  const basicModelId = 1607392319;
-  const clozeModelId = 1607392320;
-
-  const models = {
-    [basicModelId]: {
-      id: basicModelId,
-      name: "Basic",
-      type: 0,
-      mod: nowSecs,
-      usn: 0,
-      sortf: 0,
-      did: deckIdNum,
-      tmpls: [
-        {
-          name: "Card 1",
-          ord: 0,
-          qfmt: "{{Front}}",
-          afmt: "{{FrontSide}}<hr id=answer>{{Back}}",
-          bqfmt: "",
-          bafmt: ""
-        }
-      ],
-      flds: [
-        { name: "Front", ord: 0, sticky: false, rtl: false, font: "Arial", size: 20 },
-        { name: "Back",  ord: 1, sticky: false, rtl: false, font: "Arial", size: 20 }
-      ],
-      css: ".card { font-family: Arial; font-size: 20px; text-align: left; color: black; background-color: white; }",
-      latexPre: "",
-      latexPost: "",
-      tags: []
-    },
-    [clozeModelId]: {
-      id: clozeModelId,
-      name: "Cloze",
-      type: 1,
-      mod: nowSecs,
-      usn: 0,
-      sortf: 0,
-      did: deckIdNum,
-      tmpls: [
-        {
-          name: "Cloze",
-          ord: 0,
-          qfmt: "{{cloze:Text}}",
-          afmt: "{{cloze:Text}}<br>{{Back Extra}}",
-          bqfmt: "",
-          bafmt: ""
-        }
-      ],
-      flds: [
-        { name: "Text",       ord: 0, sticky: false, rtl: false, font: "Arial", size: 20 },
-        { name: "Back Extra", ord: 1, sticky: false, rtl: false, font: "Arial", size: 20 }
-      ],
-      css: ".card { font-family: Arial; font-size: 20px; text-align: left; color: black; background-color: white; } .cloze { font-weight: bold; color: blue; }",
-      latexPre: "",
-      latexPost: "",
-      tags: []
-    }
-  };
-
-  const decks = {
-    [deckIdNum]: {
-      id: deckIdNum,
-      name: deck.name,
-      mod: nowSecs,
-      usn: 0,
-      desc: "",
-      dyn: 0,
-      collapsed: false,
-      browserCollapsed: false,
-      extendNew: 0,
-      extendRev: 0,
-      conf: 1
-    }
-  };
-
-  const dconf = {
-    1: {
-      id: 1,
-      name: "Default",
-      mod: nowSecs,
-      usn: 0,
-      maxTaken: 60,
-      autoplay: true,
-      timer: 0,
-      replayq: true,
-      new: {
-        bury: true,
-        delays: [1, 10],
-        initialFactor: 2500,
-        ints: [1, 4, 7],
-        order: 1,
-        perDay: 9999
-      },
-      rev: {
-        bury: true,
-        ease4: 1.3,
-        fuzz: 0.05,
-        ivlFct: 1,
-        maxIvl: 36500,
-        perDay: 9999
-      },
-      lapse: {
-        delays: [10],
-        leechAction: 0,
-        leechFails: 8,
-        minInt: 1,
-        mult: 0
-      }
-    }
-  };
-
-  const conf = {
-    activeDecks: [deckIdNum],
-    curDeck: deckIdNum,
-    newSpread: 0,
-    collapseTime: 1200,
-    timeLim: 0,
-    estTimes: true,
-    dueCounts: true,
-    curModel: basicModelId,
-    nextPos: 1,
-    sortType: "noteFld",
-    sortBackwards: false
-  };
-
-  db.run(`
-    INSERT INTO col
-    (id, crt, mod, scm, ver, dty, usn, ls, conf, models, decks, dconf, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    1,
-    nowSecs,
-    nowSecs,
-    nowSecs,
-    11,
-    0,
-    0,
-    0,
-    JSON.stringify(conf),
-    JSON.stringify(models),
-    JSON.stringify(decks),
-    JSON.stringify(dconf),
-    "{}"
-  ]);
-
-  let dueCounter = 1;
-
-  for (let i = 0; i < (deck.cards || []).length; i++){
-    const card = deck.cards[i];
-    const note = cardToAnkiNote(card);
-
-    const nid = nowMs + i + 1;
-    const cid = nid + 1000000;
-    const guid = Math.random().toString(36).slice(2, 12);
-    const mid = note.type === "cloze" ? clozeModelId : basicModelId;
-
-    const joinedFlds = note.flds.join("\x1f");
-    const sfld = stripHtmlToText(note.flds[0] || "").slice(0, 255);
-
-    db.run(`
-      INSERT INTO notes
-      (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      nid,
-      guid,
-      mid,
-      nowSecs,
-      0,
-      "",
-      joinedFlds,
-      0,
-      0,
-      0,
-      ""
-    ]);
-
-    db.run(`
-      INSERT INTO cards
-      (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      cid,
-      nid,
-      deckIdNum,
-      0,
-      nowSecs,
-      0,
-      0,
-      0,
-      dueCounter++,
-      Number(card.interval || 0),
-      Math.round((Number(card.easeFactor || 2.5)) * 1000),
-      Number(card.repetitions || 0),
-      Number(card.wrongCount || 0),
-      0,
-      0,
-      0,
-      0,
-      ""
-    ]);
-  }
-
-  const binaryArray = db.export();
-  const zip = new JSZip();
-  zip.file("collection.anki2", binaryArray);
-  zip.file("media", "{}");
-
-  const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${deck.name.replace(/[^\w\- ]+/g, "").trim() || "deck"}.apkg`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 async function extractLinesFromPDF(file){
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({data: arrayBuffer}).promise;
@@ -1449,8 +757,6 @@ function cardsFromLinesLineByLine(lines){
 function parseCardsFromTextSmart(text){
   const lines = text.split(/\n/).map(l=>l.trim()).filter(Boolean);
   if (!lines.length) return [];
-
-  // Tab-separated (highest priority)
   const tabCards = [];
   for (const line of lines){
     const parts = line.split(/\t/);
@@ -1461,45 +767,32 @@ function parseCardsFromTextSmart(text){
     }
   }
   if (tabCards.length >= Math.floor(lines.length * 0.6)) return tabCards;
-
-  // Q: / A: pattern — handles blank-line-separated blocks
-  const qaPattern = /^Q\s*[:.)]\s*(.+)/i;
-  const ansPattern = /^A\s*[:.)]\s*(.+)/i;
+  const qaPattern = /^(?:Q(?:uestion)?[\s:.)\-]+)(.+)/i;
+  const ansPattern = /^(?:A(?:nswer)?[\s:.)\-]+)(.+)/i;
   const qaCards = [];
-  const allLines = text.split(/\n/).map(l=>l.trim()); // keep blanks for block detection
   let i = 0;
-  while (i < allLines.length){
-    const qm = allLines[i].match(qaPattern);
+  while (i < lines.length){
+    const qm = lines[i].match(qaPattern);
     if (qm){
       let front = qm[1];
       let back = "";
       i++;
-      // collect continuation lines for Q (until A: or blank)
-      while (i < allLines.length && !allLines[i].match(ansPattern) && !allLines[i].match(qaPattern)){
-        if (allLines[i] === "") { i++; continue; }
-        front += " " + allLines[i];
-        i++;
-      }
-      const am = allLines[i]?.match(ansPattern);
-      if (am){ back = am[1]; i++; }
-      // collect continuation lines for A
-      while (i < allLines.length && !allLines[i].match(qaPattern) && allLines[i] !== ""){
-        back += " " + allLines[i];
-        i++;
+      while (i < lines.length){
+        const am = lines[i].match(ansPattern);
+        if (am){ back = am[1]; i++; break; }
+        else if (lines[i].match(qaPattern)) break;
+        else { front += " " + lines[i]; i++; }
       }
       if (front && back) qaCards.push({front: front.trim(), back: back.trim()});
     } else { i++; }
   }
   if (qaCards.length > 0) return qaCards;
-
-  // Separator-based
   const sepCards = [];
   for (const line of lines){
     const m = line.match(/^(.{3,}?)\s*(?:\t| - | \| |: )\s*(.+)$/);
     if (m) sepCards.push({front: m[1].trim(), back: m[2].trim()});
   }
   if (sepCards.length >= Math.floor(lines.length * 0.5)) return sepCards;
-
   return cardsFromLinesLineByLine(lines);
 }
 
@@ -1522,49 +815,6 @@ async function extractCardsFromSpreadsheet(file){
 /******************************************************************
  * RENDER + LAYOUT
  ******************************************************************/
-function htmlToText(html){
-  const div = document.createElement("div");
-  div.innerHTML = String(html || "");
-  return (div.textContent || div.innerText || "").replace(/\s+/g," ").trim();
-}
-
-function normalizeCardHTML(html){
-  // ensure consistent <br> for newlines
-  return String(html || "").replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
-}
-
-function formatCardHTML(html){
-  const normalized = normalizeCardHTML(html);
-
-  // turn **text** into bold
-  const withBold = normalized.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
-
-  return safeHTML(withBold);
-}
-
-function safeHTML(html){
-  // Lightweight sanitizer (good enough for your offline decks)
-  const tpl = document.createElement("template");
-  tpl.innerHTML = String(html || "");
-
-  // Remove dangerous tags
-  tpl.content.querySelectorAll("script, style, iframe, object, embed").forEach(n => n.remove());
-
-  // Remove inline event handlers + javascript: URLs
-  tpl.content.querySelectorAll("*").forEach(el => {
-    [...el.attributes].forEach(attr => {
-      const name = attr.name.toLowerCase();
-      const val  = String(attr.value || "");
-      if (name.startsWith("on")) el.removeAttribute(attr.name);
-      if ((name === "href" || name === "src") && val.trim().toLowerCase().startsWith("javascript:")) {
-        el.removeAttribute(attr.name);
-      }
-    });
-  });
-
-  return tpl.innerHTML;
-}
-
 function escapeHTML(s){
   return String(s||"")
     .replaceAll("&","&amp;")
@@ -1620,15 +870,14 @@ function sidebarHTML(){
         <button class="btnSmall" id="saveMasteredGoal">Set</button>
       </div>
       <button class="btnSmall btnDanger" id="resetAllBtn" style="margin-top:8px">⚠ Reset All</button>
-   <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px">
-  <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Backup</div>
-  <button class="btnSmall" id="exportBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">↓ Export JSON</button>
-  <button class="btnSmall" id="restoreBackupBtn" style="color:var(--orange);border-color:rgba(251,146,60,.25)">↺ Restore Last Backup</button>
-  <label class="btnSmall" style="display:block;text-align:center;cursor:pointer;color:var(--purple);border-color:rgba(129,140,248,.3)">
-    ↑ Import JSON
-    <input type="file" id="importFile" accept=".json" style="display:none" />
-  </label>
-</div>
+      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px">
+        <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Backup</div>
+        <button class="btnSmall" id="exportBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">↓ Export JSON</button>
+        <label class="btnSmall" style="display:block;text-align:center;cursor:pointer;color:var(--purple);border-color:rgba(129,140,248,.3)">
+          ↑ Import JSON
+          <input type="file" id="importFile" accept=".json" style="display:none" />
+        </label>
+      </div>
     </div>
   `;
 }
@@ -1648,12 +897,17 @@ function dailyProgressHTML(){
   const goal = getDailyGoal();
   const reviewed = Number(st.reviewed || 0);
   const pct = goal ? Math.min(100, Math.round((reviewed/goal)*100)) : 0;
-
   return `
     <div class="progressCard" style="margin-bottom:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div style="font-size:14px;font-weight:900">Today's Progress</div>
-        <div class="tiny" style="color:var(--muted)">Reviewed ${reviewed} / ${goal}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="tag orange">Reviewed: ${reviewed}/${goal}</span>
+          <span class="tag green">✓ ${st.correct||0}</span>
+          <span class="tag purple">${pct}%</span>
+          <button class="btnSmall" id="resetTodayStats">Reset Today</button>
+          <button class="btnSmall" id="unmuteAllDecks">Unmute All</button>
+        </div>
       </div>
       <div class="track"><div class="fill" style="width:${pct}%"></div></div>
     </div>
@@ -1882,8 +1136,8 @@ function customHTML(){
           <label class="customCard ${isSel?'selected':''}" data-label-id="${c.id}">
             <input type="checkbox" data-cid="${c.id}" ${isSel?'checked':''} />
             <div style="flex:1;min-width:0">
-              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(htmlToText(c.front))}</div>
-              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(htmlToText(c.back))}</div>
+              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(c.front)}</div>
+              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(c.back)}</div>
               <div class="tiny" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
                 ${c.mastered?`<span style="color:var(--green);font-weight:900">★ mastered</span>`:''}
                 ${(c.seenCount||0)===0?`<span style="color:var(--orange);font-weight:900">unseen</span>`:`<span style="color:var(--cyan)">seen ×${c.seenCount}</span>`}
@@ -2124,11 +1378,10 @@ function addHTML(){
       <div style="margin-bottom:16px">
         <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Import Method</div>
         <div class="modeRow">
-        <button class="modeBtn active" data-mode="pdf">◉ PDF Upload</button>
-<button class="modeBtn" data-mode="excel">▦ Excel/CSV</button>
-<button class="modeBtn" data-mode="apkg">🧠 Anki (.apkg)</button>
-<button class="modeBtn" data-mode="text">✎ Paste Text</button>
-<button class="modeBtn" data-mode="manual">⊞ Manual</button>
+         
+          <button class="modeBtn" data-mode="text">✎ Paste Text</button>
+    
+        </div>
       </div>
       <div class="box" style="margin-bottom:14px">
         <div class="tiny" style="font-weight:900;color:var(--muted);margin-bottom:8px">Deck study order</div>
@@ -2163,7 +1416,6 @@ function bindAdd(){
   const buildBtn = document.getElementById("buildBtn");
   const deckOrderSel = document.getElementById("deckOrder");
 
-
   function setMode(m){
     mode = m;
     modeButtons.forEach(b=>b.classList.toggle("active", b.dataset.mode===m));
@@ -2173,7 +1425,6 @@ function bindAdd(){
     msgArea.innerHTML = "";
     renderModeArea();
     buildBtn.textContent = (mode==="manual") ? "Create Empty Deck" : "Extract & Create Deck";
-
   }
 
   function pushMsg(kind, text){
@@ -2182,88 +1433,60 @@ function bindAdd(){
   }
 
   function renderModeArea(){
-  if (mode==="pdf"){
-    modeArea.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">PDF Files</div>
-        <div class="upload" id="uploadZone">
-          <div style="font-size:30px;margin-bottom:8px">◉</div>
-          <div style="color:var(--muted);font-weight:900">Click to upload PDF(s)</div>
+    if (mode==="pdf"){
+      modeArea.innerHTML = `
+        <div style="margin-bottom:16px">
+          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">PDF Files</div>
+          <div class="upload" id="uploadZone">
+            <div style="font-size:30px;margin-bottom:8px">◉</div>
+            <div style="color:var(--muted);font-weight:900">Click to upload PDF(s)</div>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf" multiple style="display:none" />
+          <label style="display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--muted);font-size:12px;font-weight:900">
+            <input type="checkbox" id="lineByLine" />
+            Line-by-line mode (pairs adjacent lines into cards)
+          </label>
         </div>
-        <input type="file" id="fileInput" accept=".pdf" multiple style="display:none" />
-        <label style="display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--muted);font-size:12px;font-weight:900">
-          <input type="checkbox" id="lineByLine" />
-          Line-by-line mode (pairs adjacent lines into cards)
-        </label>
-      </div>
-    `;
-    const input = document.getElementById("fileInput");
-    document.getElementById("uploadZone").onclick = ()=> input.click();
-    input.onchange = (e)=>{
-      files = [...e.target.files];
-      pushMsg("ok", `Loaded ${files.length} PDF(s): ${files.map(f=>f.name).join(", ")}`);
-    };
-    document.getElementById("lineByLine").onchange = (e)=>{ pdfLineByLine = !!e.target.checked; };
-    return;
-  }
-
-  if (mode==="excel"){
-    modeArea.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Excel / CSV</div>
-        <div class="upload" id="uploadZone">
-          <div style="font-size:30px;margin-bottom:8px">▦</div>
-          <div style="color:var(--muted);font-weight:900">Click to upload .xlsx / .csv</div>
+      `;
+      const input = document.getElementById("fileInput");
+      document.getElementById("uploadZone").onclick = ()=> input.click();
+      input.onchange = (e)=>{
+        files = [...e.target.files];
+        pushMsg("ok", `Loaded ${files.length} PDF(s): ${files.map(f=>f.name).join(", ")}`);
+      };
+      document.getElementById("lineByLine").onchange = (e)=>{ pdfLineByLine = !!e.target.checked; };
+    }
+    if (mode==="excel"){
+      modeArea.innerHTML = `
+        <div style="margin-bottom:16px">
+          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Excel / CSV</div>
+          <div class="upload" id="uploadZone">
+            <div style="font-size:30px;margin-bottom:8px">▦</div>
+            <div style="color:var(--muted);font-weight:900">Click to upload .xlsx / .csv</div>
+          </div>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" />
         </div>
-        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" />
-      </div>
-    `;
-    const input = document.getElementById("fileInput");
-    document.getElementById("uploadZone").onclick = ()=> input.click();
-    input.onchange = (e)=>{
-      files = [...e.target.files];
-      pushMsg("ok", `Loaded spreadsheet: ${files[0]?.name || "(none)"}`);
-    };
-    return;
-  }
-
-  if (mode==="apkg"){
-    modeArea.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Anki Deck (.apkg)</div>
-        <div class="upload" id="uploadZone">
-          <div style="font-size:30px;margin-bottom:8px">🧠</div>
-          <div style="color:var(--muted);font-weight:900">Click to upload .apkg or .colpkg</div>
+      `;
+      const input = document.getElementById("fileInput");
+      document.getElementById("uploadZone").onclick = ()=> input.click();
+      input.onchange = (e)=>{
+        files = [...e.target.files];
+        pushMsg("ok", `Loaded spreadsheet: ${files[0]?.name || "(none)"}`);
+      };
+    }
+    if (mode==="text"){
+      modeArea.innerHTML = `
+        <div style="margin-bottom:16px">
+          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Paste Content</div>
+          <textarea class="textarea" id="textArea" rows="10" placeholder="Paste Q/A pairs, term-definition lines, or tab-separated content..."></textarea>
         </div>
-        <input type="file" id="fileInput" accept=".apkg,.colpkg" style="display:none" />
-        <div class="note" style="margin-top:10px">Imports text fields (front/back). Media import can be added next.</div>
-      </div>
-    `;
-    const input = document.getElementById("fileInput");
-    document.getElementById("uploadZone").onclick = ()=> input.click();
-    input.onchange = (e)=>{
-      files = [...e.target.files];
-      pushMsg("ok", `Loaded APKG: ${files[0]?.name || "(none)"}`);
-    };
-    return;
+      `;
+      document.getElementById("textArea").oninput = (e)=>{ textContent = e.target.value; };
+    }
+    if (mode==="manual"){
+      modeArea.innerHTML = `<div class="box">Deck created empty — add cards in Manage.</div>`;
+    }
   }
-
-  if (mode==="text"){
-    modeArea.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Paste Content</div>
-        <textarea class="textarea" id="textArea" rows="10" placeholder="Paste Q/A pairs, term-definition lines, or tab-separated content..."></textarea>
-      </div>
-    `;
-    document.getElementById("textArea").oninput = (e)=>{ textContent = e.target.value; };
-    return;
-  }
-
-  if (mode==="manual"){
-    modeArea.innerHTML = `<div class="box">Deck created empty — add cards in Manage.</div>`;
-    return;
-  }
-}
 
   async function buildDeck(){
     if (busy) return;
@@ -2286,11 +1509,6 @@ function bindAdd(){
         if (!files.length) throw new Error("Upload an Excel/CSV file");
         rawCards = await extractCardsFromSpreadsheet(files[0]);
       }
- if (mode==="apkg"){
-  if (!files.length) throw new Error("Upload an .apkg file");
-  rawCards = await importAPKG(files[0]);
-  pushMsg("ok", `APKG extracted ${rawCards.length} raw notes`);
-}
       if (mode==="text"){
         if (!textContent.trim()) throw new Error("Paste some text");
         rawCards = parseCardsFromTextSmart(textContent);
@@ -2301,7 +1519,7 @@ function bindAdd(){
       for (const c of rawCards){
         const front = (c.front||"").trim();
         const back  = (c.back||"").trim();
-        if (!front && !back) continue;
+        if (!front || !back) continue;
         const k = front+"||"+back;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -2311,8 +1529,7 @@ function bindAdd(){
         id: `${Date.now()}_${i}`,
         front: c.front,
         back: c.back,
-        createdAtIdx: i,
-        importedCloze: !!c.importedCloze
+        createdAtIdx: i
       }));
       const deckId = `deck_${Date.now()}`;
       const order = deckOrderSel.value;
@@ -2348,9 +1565,6 @@ function manageHTML(){
   `;
 }
 
-// merging flag — scoped inside bindManage via closure, global var just tracks state
-let merging = false;
-
 function bindManage(){
   document.getElementById("backDash").onclick = ()=> setScreen("dashboard");
   const deckList = document.getElementById("deckList");
@@ -2358,10 +1572,6 @@ function bindManage(){
   let selected = null;
   let filter = "all";
   let editingCardId = null;
-
-  // ── Merge UI helpers (scoped here so renderPanel is accessible) ──
-  function showMergeUI(){ merging = true; editingCardId = null; renderPanel(); }
-  function hideMergeUI(){ merging = false; renderPanel(); }
 
   function renderDeckList(){
     const entries = Object.entries(DATA.decks);
@@ -2385,7 +1595,7 @@ function bindManage(){
       `;
     }).join("");
     deckList.querySelectorAll("[data-deck]").forEach(el=>{
-      el.onclick = ()=>{ selected = el.dataset.deck; editingCardId=null; merging=false; renderDeckList(); renderPanel(); };
+      el.onclick = ()=>{ selected = el.dataset.deck; editingCardId=null; renderDeckList(); renderPanel(); };
     });
     renderPanel();
   }
@@ -2421,16 +1631,14 @@ function bindManage(){
             · Mastered: <span style="color:var(--green);font-weight:900">${masteredCount}</span>
           </div>
         </div>
-       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-  <select id="deckOrderSel" class="btnSmall" style="background:transparent">
-    <option value="random" ${deck.studyOrder==="random"?"selected":""}>Order: Random</option>
-    <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
-  </select>
-  <button class="btnSmall" id="newCardBtn">+ Card</button>
-  <button class="btnSmall" id="exportApkgBtn" style="color:var(--green);border-color:rgba(74,222,128,.25)">↓ APKG</button>
-  <button class="btnSmall" id="mergeDeckBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">⊕ Merge</button>
-  <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
-</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="deckOrderSel" class="btnSmall" style="background:transparent">
+            <option value="random" ${deck.studyOrder==="random"?"selected":""}>Order: Random</option>
+            <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
+          </select>
+          <button class="btnSmall" id="newCardBtn">+ Card</button>
+          <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
+        </div>
       </div>
       <div class="filters">
         ${pill("all")} ${pill("due")} ${pill("unseen")} ${pill("mastered")}
@@ -2442,8 +1650,8 @@ function bindManage(){
           <div class="rowCard">
             <div class="mono" style="color:var(--muted2);font-size:11px;width:30px;flex-shrink:0">${i+1}</div>
             <div style="flex:1;min-width:0">
-              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(htmlToText(c.front))}</div>
-              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(htmlToText(c.back))}</div>
+              <div class="ellipsis" style="font-size:13px;font-weight:900">${escapeHTML(c.front)}</div>
+              <div class="ellipsis" style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHTML(c.back)}</div>
               <div class="tiny" style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
                 ${(c.frontImage)?`<span>🖼 front</span>`:""}
                 ${(c.backImage)?`<span>🖼 back</span>`:""}
@@ -2478,32 +1686,8 @@ function bindManage(){
       });
       selected = null;
       editingCardId = null;
-      merging = false;
     };
-   deckPanel.querySelector("#newCardBtn").onclick = ()=>{ editingCardId = "__new__"; merging = false; renderPanel(); };
-
-const exportApkgBtn = deckPanel.querySelector("#exportApkgBtn");
-if (exportApkgBtn){
-  exportApkgBtn.onclick = async ()=>{
-    try{
-      exportApkgBtn.disabled = true;
-      exportApkgBtn.textContent = "Building...";
-      await exportDeckAsApkg(selected);
-      exportApkgBtn.textContent = "Done";
-      setTimeout(()=>{
-        exportApkgBtn.textContent = "↓ APKG";
-        exportApkgBtn.disabled = false;
-      }, 1000);
-    }catch(err){
-      alert("APKG export failed: " + (err.message || err));
-      exportApkgBtn.textContent = "↓ APKG";
-      exportApkgBtn.disabled = false;
-    }
-  };
-}
-
-deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
-
+    deckPanel.querySelector("#newCardBtn").onclick = ()=>{ editingCardId = "__new__"; renderPanel(); };
     deckPanel.querySelectorAll("[data-star]").forEach(btn=>{
       btn.onclick = ()=> updateData(d=>{
         const c = d.decks[selected].cards.find(x=>x.id===btn.dataset.star);
@@ -2511,7 +1695,7 @@ deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
       });
     });
     deckPanel.querySelectorAll("[data-edit]").forEach(btn=>{
-      btn.onclick = ()=>{ editingCardId = btn.dataset.edit; merging = false; renderPanel(); };
+      btn.onclick = ()=>{ editingCardId = btn.dataset.edit; renderPanel(); };
     });
     deckPanel.querySelectorAll("[data-del]").forEach(btn=>{
       btn.onclick = ()=>{
@@ -2540,125 +1724,6 @@ deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
     });
 
     const editBox = deckPanel.querySelector("#editBox");
-
-    // ─────────────────────────────────────────────
-    // MERGE UI
-    // ─────────────────────────────────────────────
-    if (merging){
-      const deckEntries = Object.entries(DATA.decks).filter(([id])=>id !== selected);
-      if (!deckEntries.length){
-        editBox.innerHTML = `
-          <div class="box err" style="margin-bottom:12px">
-            You need at least 2 decks to merge.
-            <div style="margin-top:10px"><button class="btnSmall" id="closeMerge">Close</button></div>
-          </div>
-        `;
-        deckPanel.querySelector("#closeMerge").onclick = hideMergeUI;
-      } else {
-        editBox.innerHTML = `
-          <div class="box" style="margin-bottom:12px;border-color:rgba(34,211,238,.25);background:rgba(34,211,238,.04)">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-weight:900;color:var(--cyan)">⊕ Merge Decks</div>
-              <button class="btnSmall" id="closeMerge">✕ Close</button>
-            </div>
-
-            <div class="tiny" style="margin-top:10px;color:var(--muted);font-weight:900">
-              Merge another deck <strong>into</strong> <span style="color:var(--cyan)">${escapeHTML(deck.name)}</span>
-            </div>
-
-            <div style="margin-top:14px;display:grid;gap:12px">
-              <div>
-                <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;color:var(--muted2)">Source deck (will be merged in)</div>
-                <select id="mergeSourceSel" class="input" style="padding:8px 12px;font-size:13px">
-                  ${deckEntries.map(([id,d])=>`
-                    <option value="${id}">${escapeHTML(d.name)} (${(d.cards||[]).length} cards)</option>
-                  `).join("")}
-                </select>
-              </div>
-
-              <label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;color:var(--muted)">
-                <input type="checkbox" id="mergeDedupe" checked style="accent-color:var(--purple)" />
-                <span><strong style="color:var(--text)">Deduplicate</strong> — skip cards with identical front + back</span>
-              </label>
-
-              <label style="display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;color:var(--muted)">
-                <input type="checkbox" id="mergeDeleteSource" style="accent-color:var(--red)" />
-                <span><strong style="color:var(--text)">Delete source deck</strong> after merge</span>
-              </label>
-
-              <button class="btnPrimary" id="doMergeBtn" style="background:linear-gradient(135deg,var(--cyan),#0ea5e9);color:#0a0b0f">
-                ⊕ Merge Now
-              </button>
-
-              <div class="note">
-                Cards keep their scheduling data (interval, ease factor, next review). Incoming cards get new IDs to avoid collisions.
-              </div>
-            </div>
-          </div>
-        `;
-
-        deckPanel.querySelector("#closeMerge").onclick = hideMergeUI;
-
-        deckPanel.querySelector("#doMergeBtn").onclick = ()=>{
-          const sourceId = deckPanel.querySelector("#mergeSourceSel").value;
-          const dedupe = !!deckPanel.querySelector("#mergeDedupe").checked;
-          const delSource = !!deckPanel.querySelector("#mergeDeleteSource").checked;
-
-          if (!sourceId || !DATA.decks[sourceId]) return;
-
-          const sourceName = DATA.decks[sourceId].name;
-          const targetName = DATA.decks[selected].name;
-          if (!confirm(`Merge "${sourceName}" into "${targetName}"?\n\nThis cannot be undone.`)) return;
-
-          updateData(d=>{
-            const target = d.decks[selected];
-            const source = d.decks[sourceId];
-            if (!target || !source) return;
-
-            const targetCards = (target.cards||[]).map(c=>normalizeCard(c));
-            const sourceCards = (source.cards||[]).map(c=>normalizeCard(c));
-
-            const existingKeys = new Set(
-              dedupe
-                ? targetCards.map(c => `${(c.front||"").trim()}||${(c.back||"").trim()}`)
-                : []
-            );
-
-            const maxIdx = targetCards.reduce((m,c)=>Math.max(m, c.createdAtIdx ?? 0), -1);
-            let nextIdx = maxIdx + 1;
-
-            const incoming = [];
-            for (const sc of sourceCards){
-              const key = `${(sc.front||"").trim()}||${(sc.back||"").trim()}`;
-              if (dedupe && existingKeys.has(key)) continue;
-              existingKeys.add(key);
-
-              const clone = normalizeCard({...sc});
-              clone.id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-              clone.createdAtIdx = nextIdx++;
-              incoming.push(clone);
-            }
-
-            target.cards = [...(target.cards||[]), ...incoming];
-
-            if (delSource){
-              delete d.decks[sourceId];
-              if (selected === sourceId) selected = null;
-            }
-          });
-
-          merging = false;
-          alert(`Done! Merged cards into "${targetName}".`);
-        };
-      }
-
-      // Stop here — don't show card editor when merge UI is open
-      return;
-    }
-
-    // ─────────────────────────────────────────────
-    // CARD EDITOR
-    // ─────────────────────────────────────────────
     if (editingCardId){
       const isNew = editingCardId === "__new__";
       const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
@@ -2670,24 +1735,24 @@ deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
             <button class="btnSmall" id="closeEdit">Close</button>
           </div>
           <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px">
-            <textarea class="textarea" id="efront" rows="2" placeholder="Front text">${escapeHTML(htmlToText(c.front))}</textarea>
+            <textarea class="textarea" id="efront" rows="2" placeholder="Front text">${escapeHTML(c.front)}</textarea>
             <div class="box" style="background:var(--panel2)">
-             <div style="font-weight:900;margin-bottom:6px">Front image</div>
-<div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, drag/drop, or upload.</div>
-<div id="frontPaste" class="upload" style="padding:14px" tabindex="0">Paste or drop image here</div>
-<input type="file" id="frontFile" accept="image/*" style="margin-top:10px" />
-<div id="frontPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  ${c.frontImage ? `<img class="imgThumb" src="${c.frontImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-  <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
-</div>
+              <div style="font-weight:900;margin-bottom:6px">Front image</div>
+              <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, or upload.</div>
+              <div id="frontPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
+              <input type="file" id="frontFile" accept="image/*" style="margin-top:10px" />
+              <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                ${c.frontImage ? `<img class="imgThumb" src="${c.frontImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+                <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
+              </div>
             </div>
-            <textarea class="textarea" id="eback" rows="2" placeholder="Back text">${escapeHTML(htmlToText(c.back))}</textarea>
+            <textarea class="textarea" id="eback" rows="2" placeholder="Back text">${escapeHTML(c.back)}</textarea>
             <div class="box" style="background:var(--panel2)">
               <div style="font-weight:900;margin-bottom:6px">Back image</div>
               <div class="tiny" style="color:var(--muted);margin-bottom:8px">Click area then paste (Ctrl+V) an image, or upload.</div>
               <div id="backPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
               <input type="file" id="backFile" accept="image/*" style="margin-top:10px" />
-             <div id="backPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                 ${c.backImage ? `<img class="imgThumb" src="${c.backImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
                 <button class="btnSmall btnDanger" id="clearBackImg">Clear</button>
               </div>
@@ -2708,85 +1773,12 @@ deckPanel.querySelector("#mergeDeckBtn").onclick = showMergeUI;
       const backPaste = deckPanel.querySelector("#backPaste");
       let frontImg = c.frontImage || null;
       let backImg = c.backImage || null;
-      const frontPreview = deckPanel.querySelector("#frontPreview");
-const backPreview  = deckPanel.querySelector("#backPreview");
-
-function renderFrontPreview(){
-  if (!frontPreview) return;
-  frontPreview.innerHTML = `
-    ${frontImg ? `<img class="imgThumb" src="${frontImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-    <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
-  `;
-  const btn = deckPanel.querySelector("#clearFrontImg");
-  if (btn) btn.onclick = ()=>{ frontImg = null; renderFrontPreview(); };
-}
-
-function renderBackPreview(){
-  if (!backPreview) return;
-  backPreview.innerHTML = `
-    ${backImg ? `<img class="imgThumb" src="${backImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-    <button class="btnSmall btnDanger" id="clearBackImg">Clear</button>
-  `;
-  const btn = deckPanel.querySelector("#clearBackImg");
-  if (btn) btn.onclick = ()=>{ backImg = null; renderBackPreview(); };
-}
-
-// Make paste boxes reliably receive paste
-frontPaste.onclick = ()=> frontPaste.focus();
-backPaste.onclick  = ()=> backPaste.focus();
-
-frontPaste.addEventListener("paste", async (e)=>{
-  const b64 = await clipboardImageToBase64(e);
-  if (b64){
-    e.preventDefault();
-    frontImg = b64;
-    renderFrontPreview();
-  }
-});
-
-backPaste.addEventListener("paste", async (e)=>{
-  const b64 = await clipboardImageToBase64(e);
-  if (b64){
-    e.preventDefault();
-    backImg = b64;
-    renderBackPreview();
-  }
-});
-
-// Drag/drop support (optional but nice)
-[frontPaste, backPaste].forEach((el, which)=>{
-  el.addEventListener("dragover", (e)=>{ e.preventDefault(); });
-  el.addEventListener("drop", async (e)=>{
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith("image/")){
-      const b64 = await fileToBase64(file);
-      if (which === frontPaste){ frontImg = b64; renderFrontPreview(); }
-      else { backImg = b64; renderBackPreview(); }
-    }
-  });
-});
-
-// File upload handlers
-deckPanel.querySelector("#frontFile").onchange = async (e)=>{
-  const file = e.target.files?.[0];
-  if (file){
-    frontImg = await fileToBase64(file);
-    renderFrontPreview();
-  }
-};
-
-deckPanel.querySelector("#backFile").onchange = async (e)=>{
-  const file = e.target.files?.[0];
-  if (file){
-    backImg = await fileToBase64(file);
-    renderBackPreview();
-  }
-};
-
-// Initial render
-renderFrontPreview();
-renderBackPreview();
+      frontPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ frontImg = b64; renderPanel(); } };
+      backPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ backImg = b64; renderPanel(); } };
+      deckPanel.querySelector("#frontFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ frontImg = await fileToBase64(file); renderPanel(); } };
+      deckPanel.querySelector("#backFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ backImg = await fileToBase64(file); renderPanel(); } };
+      deckPanel.querySelector("#clearFrontImg").onclick = ()=>{ frontImg=null; renderPanel(); };
+      deckPanel.querySelector("#clearBackImg").onclick = ()=>{ backImg=null; renderPanel(); };
       deckPanel.querySelector("#saveCard").onclick = ()=>{
         const nf = deckPanel.querySelector("#efront").value.trim();
         const nb = deckPanel.querySelector("#eback").value.trim();
@@ -2880,12 +1872,11 @@ function studyHTML(){
           <div class="track" style="flex:1;min-width:240px"><div class="fill" id="pfill"></div></div>
           <span class="mono" id="ptext" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
         </div>
-       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-  <div style="font-size:12px;color:var(--muted);font-weight:900;white-space:nowrap" id="deckName"></div>
-  <button class="btnSmall" id="editStudyCardBtn">Edit</button>
-  <button class="btnSmall" id="starBtn">★ Star</button>
-  <span class="tag purple" id="seenBadge" style="display:none"></span>
-</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="font-size:12px;color:var(--muted);font-weight:900;white-space:nowrap" id="deckName"></div>
+          <button class="btnSmall" id="starBtn">★ Star</button>
+          <span class="tag purple" id="seenBadge" style="display:none"></span>
+        </div>
       </div>
 
       <div class="cardZone">
@@ -2899,10 +1890,14 @@ function studyHTML(){
 
         <div id="typedPane">
           <input class="ansInput" id="ansInput" placeholder="Type your answer…" autocomplete="off" spellcheck="false" />
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
-            <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
-            <button class="btnPrimary" id="checkBtn">Check →</button>
-          </div>
+         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
+  <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btnOutline" id="revealBtn">Reveal / Flip</button>
+    <button class="btnPrimary" id="checkBtn">Check →</button>
+  </div>
+</div>
+
         </div>
 
         <div id="revealPane" class="reveal" style="display:none">
@@ -2914,9 +1909,6 @@ function studyHTML(){
           <img id="backImg" class="imgLarge" style="display:none" />
           <div class="rating">
             ${rateBtn("Again","~1m","var(--red)","again")}
-            ${rateBtn("Hard","~2–3m","var(--orange)","hard")}
-            ${rateBtn("Good","few d","#60a5fa","good")}
-            ${rateBtn("Easy","week+","var(--green)","easy")}
             ${rateBtn("Mastered","retire","var(--purple)","mastered",true)}
           </div>
           <div class="hint" style="text-align:center">Again/Hard repeat soon · wrong-deck requeue until Mastered</div>
@@ -2954,6 +1946,7 @@ function bindStudy(){
   if (!st) return;
 
   const qtext        = document.getElementById("qtext");
+  const revealBtn    = document.getElementById("revealBtn");
   const ansInput     = document.getElementById("ansInput");
   const checkBtn     = document.getElementById("checkBtn");
   const typedPane    = document.getElementById("typedPane");
@@ -2968,7 +1961,6 @@ function bindStudy(){
   const deckName     = document.getElementById("deckName");
   const modeTagWrap  = document.getElementById("modeTagWrap");
   const mcOptions    = document.getElementById("mcOptions");
-  const editStudyCardBtn = document.getElementById("editStudyCardBtn");
   const starBtn      = document.getElementById("starBtn");
   const seenBadge    = document.getElementById("seenBadge");
   const frontImg     = document.getElementById("frontImg");
@@ -2984,214 +1976,13 @@ function bindStudy(){
 
   function getDeckCards(deckId){ return DATA.decks[deckId]?.cards || []; }
 
-  function syncStudyCardEverywhere(updatedCard){
-    if (!updatedCard) return;
-
-    st.primaryQueue = (st.primaryQueue || []).map(c =>
-      c.id === updatedCard.id ? {...c, ...updatedCard} : c
-    );
-
-    st.requeue = (st.requeue || []).map(c =>
-      c.id === updatedCard.id ? {...c, ...updatedCard} : c
-    );
-
-    st.learning = (st.learning || []).map(x => ({
-      ...x,
-      card: x.card?.id === updatedCard.id ? {...x.card, ...updatedCard} : x.card
-    }));
-
-    if (st.active?.card?.id === updatedCard.id){
-      st.active.card = {...st.active.card, ...updatedCard};
-    }
+ function pickNextActive(){
+  const li = st.learning.findIndex(x => x.dueAfterTotal <= st.sess.total);
+  if (li >= 0){
+    st.active = { card: st.learning[li].card, source: "learning", learningIndex: li };
+    return st.active.card;
   }
 
-  function openStudyEditModal(card){
-    if (!card) return;
-
-    const existing = document.getElementById("studyEditModal");
-    if (existing) existing.remove();
-
-    let frontImg = card.frontImage || null;
-    let backImg = card.backImage || null;
-
-    const modal = document.createElement("div");
-    modal.id = "studyEditModal";
-    modal.className = "modalBack";
-    modal.innerHTML = `
-      <div class="modalCard">
-        <div class="modalHead">
-          <div class="modalTitle">Edit Card</div>
-          <button class="btnSmall" id="closeStudyEdit">Close</button>
-        </div>
-
-        <div class="editGrid">
-          <div class="editSection">
-            <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Front</div>
-            <textarea class="textarea" id="studyEditFront" rows="3" placeholder="Front text">${escapeHTML(htmlToText(card.front))}</textarea>
-
-            <div class="tiny" style="margin-top:10px;color:var(--muted);margin-bottom:8px">
-              Paste image, drag/drop, or upload
-            </div>
-            <div id="studyFrontPaste" class="upload" style="padding:14px" tabindex="0">Paste or drop front image here</div>
-            <input type="file" id="studyFrontFile" accept="image/*" style="margin-top:10px" />
-            <div id="studyFrontPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
-          </div>
-
-          <div class="editSection">
-            <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Back</div>
-            <textarea class="textarea" id="studyEditBack" rows="3" placeholder="Back text">${escapeHTML(htmlToText(card.back))}</textarea>
-
-            <div class="tiny" style="margin-top:10px;color:var(--muted);margin-bottom:8px">
-              Paste image, drag/drop, or upload
-            </div>
-            <div id="studyBackPaste" class="upload" style="padding:14px" tabindex="0">Paste or drop back image here</div>
-            <input type="file" id="studyBackFile" accept="image/*" style="margin-top:10px" />
-            <div id="studyBackPreview" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
-          <div class="tiny" style="color:var(--muted)">Tip: use **double asterisks** for bold</div>
-          <button class="btnPrimary" id="saveStudyEdit">Save Changes</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    const close = ()=> modal.remove();
-
-    const frontPreview = modal.querySelector("#studyFrontPreview");
-    const backPreview = modal.querySelector("#studyBackPreview");
-    const frontPaste = modal.querySelector("#studyFrontPaste");
-    const backPaste = modal.querySelector("#studyBackPaste");
-
-    function renderFrontPreview(){
-      frontPreview.innerHTML = `
-        ${frontImg ? `<img class="imgThumb" src="${frontImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-        <button class="btnSmall btnDanger" id="clearStudyFrontImg">Clear</button>
-      `;
-      frontPreview.querySelector("#clearStudyFrontImg").onclick = ()=>{
-        frontImg = null;
-        renderFrontPreview();
-      };
-    }
-
-    function renderBackPreview(){
-      backPreview.innerHTML = `
-        ${backImg ? `<img class="imgThumb" src="${backImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
-        <button class="btnSmall btnDanger" id="clearStudyBackImg">Clear</button>
-      `;
-      backPreview.querySelector("#clearStudyBackImg").onclick = ()=>{
-        backImg = null;
-        renderBackPreview();
-      };
-    }
-
-    frontPaste.onclick = ()=> frontPaste.focus();
-    backPaste.onclick = ()=> backPaste.focus();
-
-    frontPaste.addEventListener("paste", async (e)=>{
-      const b64 = await clipboardImageToBase64(e);
-      if (b64){
-        e.preventDefault();
-        frontImg = b64;
-        renderFrontPreview();
-      }
-    });
-
-    backPaste.addEventListener("paste", async (e)=>{
-      const b64 = await clipboardImageToBase64(e);
-      if (b64){
-        e.preventDefault();
-        backImg = b64;
-        renderBackPreview();
-      }
-    });
-
-    [frontPaste, backPaste].forEach((el, idx)=>{
-      el.addEventListener("dragover", (e)=> e.preventDefault());
-      el.addEventListener("drop", async (e)=>{
-        e.preventDefault();
-        const file = e.dataTransfer.files?.[0];
-        if (file && file.type.startsWith("image/")){
-          const b64 = await fileToBase64(file);
-          if (idx === 0){
-            frontImg = b64;
-            renderFrontPreview();
-          } else {
-            backImg = b64;
-            renderBackPreview();
-          }
-        }
-      });
-    });
-
-    modal.querySelector("#studyFrontFile").onchange = async (e)=>{
-      const file = e.target.files?.[0];
-      if (file){
-        frontImg = await fileToBase64(file);
-        renderFrontPreview();
-      }
-    };
-
-    modal.querySelector("#studyBackFile").onchange = async (e)=>{
-      const file = e.target.files?.[0];
-      if (file){
-        backImg = await fileToBase64(file);
-        renderBackPreview();
-      }
-    };
-
-    modal.querySelector("#closeStudyEdit").onclick = close;
-    modal.addEventListener("click", (e)=>{
-      if (e.target === modal) close();
-    });
-
-    modal.querySelector("#saveStudyEdit").onclick = ()=>{
-      const newFront = modal.querySelector("#studyEditFront").value.trim();
-      const newBack  = modal.querySelector("#studyEditBack").value.trim();
-
-      if (!newFront && !frontImg){
-        alert("Add front text or image.");
-        return;
-      }
-      if (!newBack && !backImg){
-        alert("Add back text or image.");
-        return;
-      }
-
-      updateData(d=>{
-        const liveCard = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
-        if (liveCard){
-          liveCard.front = newFront;
-          liveCard.back = newBack;
-          liveCard.frontImage = frontImg;
-          liveCard.backImage = backImg;
-        }
-      });
-
-      syncStudyCardEverywhere({
-        ...card,
-        front: newFront,
-        back: newBack,
-        frontImage: frontImg,
-        backImage: backImg
-      });
-
-      close();
-      refresh();
-    };
-
-    renderFrontPreview();
-    renderBackPreview();
-  }
-
-  function pickNextActive(){
-    const li = st.learning.findIndex(x => x.dueTimeMs <= nowMs());
-    if (li >= 0){
-      st.active = { card: st.learning[li].card, source: "learning", learningIndex: li };
-      return st.active.card;
-    }
     if (st.isRequeue){
       const c = st.requeue[st.reqIdx];
       st.active = c ? { card: c, source: "requeue", learningIndex: -1 } : null;
@@ -3221,6 +2012,16 @@ function bindStudy(){
     return (liveCard || card).mastered;
   }
 
+  function revealAnswerNeutral(){
+    const card = currentCard();
+    if (!card || st.phase === "revealed") return;
+    st.input = "";
+    st.revealedBySpace = true;
+    st.result = "revealed";
+    st.phase = "revealed";
+    refresh();
+  }
+
   function refresh(){
     if (st.dayKey !== todayStr() && !st.isCustomMode){
       setScreen("dashboard");
@@ -3235,7 +2036,7 @@ function bindStudy(){
             <div class="done">
               <div class="ic">✦</div>
               <div class="t">${st.isCustomMode ? "Custom Session Done!" : "Session Complete!"}</div>
-              <div class="s">${st.sess.total?Math.round((st.sess.correct/st.sess.total)*100):0}% accuracy · ${st.sess.requeues} requeue(s) · ${st.sess.starred} star(s)</div>
+              <div class="s">${st.sess.total ? Math.round((st.sess.correct/st.sess.total)*100) : 0}% accuracy · ${st.sess.requeues} requeue(s) · ${st.sess.starred} star(s)</div>
               ${st.isCustomMode ? `
                 <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:20px">
                   <button class="btnPrimary" id="restartCustom">↺ Restart Same Cards</button>
@@ -3251,7 +2052,6 @@ function bindStudy(){
       if (st.isCustomMode){
         document.getElementById("backToCustom").onclick = ()=> setScreen("custom");
         document.getElementById("restartCustom").onclick = ()=>{
-          // Restart with the same cards (re-shuffle if needed)
           window.__customQueue = CUSTOM_SHUFFLE
             ? shuffle(window.__customQueue || [])
             : (window.__customQueue || []);
@@ -3268,7 +2068,7 @@ function bindStudy(){
     modeTagWrap.innerHTML = "";
     if (isCardMastered) modeTagWrap.innerHTML += `<div class="clozeTag" style="background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.25);color:var(--green)">★ MASTERED REVIEW</div>`;
     if (mode === "cloze") modeTagWrap.innerHTML += `<div class="clozeTag">CLOZE MODE</div>`;
-    if (mode === "mc")    modeTagWrap.innerHTML += `<div class="mcTag">MULTIPLE CHOICE</div>`;
+    if (mode === "mc") modeTagWrap.innerHTML += `<div class="mcTag">MULTIPLE CHOICE</div>`;
     if (!isCardMastered && (card.wrongCount||0) > 0) modeTagWrap.innerHTML += `<div class="clozeTag" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)">Wrong: ${card.wrongCount||0}</div>`;
     if (card.starred) modeTagWrap.innerHTML += `<div class="clozeTag" style="background:rgba(251,146,60,.08);border-color:rgba(251,146,60,.25);color:var(--orange)">★ Starred</div>`;
 
@@ -3289,10 +2089,6 @@ function bindStudy(){
       seenBadge.textContent = `Seen ×${card.seenCount||0}`;
     }
 
-    if (editStudyCardBtn){
-      editStudyCardBtn.onclick = ()=> openStudyEditModal(card);
-    }
-
     if (starBtn){
       starBtn.textContent = card.starred ? "★ Unstar" : "★ Star";
       starBtn.onclick = ()=>{
@@ -3305,19 +2101,19 @@ function bindStudy(){
       };
     }
 
-    if (card.frontImage){ frontImg.src = card.frontImage; frontImg.style.display="block"; }
-    else frontImg.style.display="none";
+    if (card.frontImage){
+      frontImg.src = card.frontImage;
+      frontImg.style.display = "block";
+    } else {
+      frontImg.style.display = "none";
+    }
 
- if (mode === "cloze"){
-  if (card.importedCloze){
-    qtext.innerHTML = formatCardHTML(card.front);
-  } else {
-    const cl = makeCloze(htmlToText(card.back));
-    qtext.textContent = cl.clozeText;
-  }
-} else {
-  qtext.innerHTML = formatCardHTML(card.front);
-}
+    if (mode === "cloze"){
+      const cl = makeCloze(card.back);
+      qtext.textContent = cl.clozeText;
+    } else {
+      qtext.textContent = card.front || "(no front text)";
+    }
 
     if (mode === "mc" && st.phase === "question"){
       typedPane.style.display = "none";
@@ -3325,11 +2121,13 @@ function bindStudy(){
       const deckCards = getDeckCards(card.deckId);
       st.mc = buildMCOptions(card, deckCards, 4);
       st.mcPicked = null;
+
       mcOptions.innerHTML = st.mc.options.map((opt,i)=>`
         <button class="mcBtn" data-mc="${i}">
           ${String.fromCharCode(65+i)}. ${escapeHTML(opt)}
         </button>
       `).join("");
+
       mcOptions.querySelectorAll("[data-mc]").forEach(btn=>{
         btn.onclick = ()=>{
           const pick = st.mc.options[Number(btn.dataset.mc)];
@@ -3357,17 +2155,33 @@ function bindStudy(){
     }
 
     if (st.phase === "revealed"){
-      banner.className = "banner " + st.result;
+      banner.className =
+        st.result === "correct" ? "banner correct" :
+        st.result === "close" ? "banner close" :
+        st.result === "revealed" ? "banner" :
+        "banner wrong";
+
       banner.textContent =
-        st.result==="correct" ? "✓ Correct!" :
-        st.result==="close"   ? "≈ Close — review full answer" :
-                                "✗ Incorrect";
-      const you = (mode==="mc") ? (st.mcPicked||"") : (st.input || (st.revealedBySpace?"(revealed)":""));
+        st.result === "correct" ? "✓ Correct!" :
+        st.result === "close" ? "≈ Close — review full answer" :
+        st.result === "revealed" ? "👁 Revealed" :
+        "✗ Incorrect";
+
+      const you = (mode==="mc")
+        ? (st.mcPicked || (st.revealedBySpace ? "(revealed)" : ""))
+        : (st.input || (st.revealedBySpace ? "(revealed)" : ""));
+
       youAns.textContent = you;
       youAns.style.color = (st.result==="wrong") ? "var(--red)" : "var(--text)";
-      trueAns.innerHTML = formatCardHTML(card.back);
-      if (card.backImage){ backImg.src = card.backImage; backImg.style.display="block"; }
-      else backImg.style.display="none";
+
+      trueAns.textContent = card.back;
+
+      if (card.backImage){
+        backImg.src = card.backImage;
+        backImg.style.display = "block";
+      } else {
+        backImg.style.display = "none";
+      }
     }
 
     sc.textContent = st.sess.correct;
@@ -3376,11 +2190,10 @@ function bindStudy(){
     sst.textContent = st.sess.starred;
 
     if (sleft){
-      const already = (DATA.stats[todayStr()]?.reviewed||0);
+      const already = (DATA.stats[todayStr()]?.reviewed || 0);
       sleft.textContent = Math.max(0, getDailyGoal() - already);
     }
 
-    
     const sec = Math.floor((nowMs() - st.sessionStartedAt)/1000);
     stimer.textContent = `${String(Math.floor(sec/60)).padStart(2,"0")}:${String(sec%60).padStart(2,"0")}`;
   }
@@ -3390,25 +2203,13 @@ function bindStudy(){
     if (!card) return;
     const mode = getModeForCard(card);
     if (mode === "mc") return;
+
     const input = ansInput.value.trim();
     if (!input) return;
-    st.input = input;
-    const ansText = htmlToText(card.back);
-    const ans = (mode === "cloze" && !card.importedCloze)
-      ? makeCloze(ansText).answer
-      : ansText;
-    st.result = checkAnswer(input, ans);
-    st.phase = "revealed";
-    refresh();
-  }
 
-  
-  function revealBySpace(){
-    const card = currentCard();
-    if (!card || st.phase === "revealed") return;
-    st.input = "";
-    st.revealedBySpace = true;
-    st.result = "wrong";
+    st.input = input;
+    const ans = (mode === "cloze") ? makeCloze(card.back).answer : card.back;
+    st.result = checkAnswer(input, ans);
     st.phase = "revealed";
     refresh();
   }
@@ -3424,111 +2225,179 @@ function bindStudy(){
     st.justAdvanced = true;
 
     if (st.isRequeue){
-      if (st.reqIdx + 1 < st.requeue.length) st.reqIdx++;
-      else { st.isRequeue = false; st.idx = st.primaryQueue.length; }
+      if (st.reqIdx >= st.requeue.length){
+        st.isRequeue = false;
+        st.idx = st.primaryQueue.length;
+      }
     } else {
-      if (st.idx + 1 < st.primaryQueue.length) st.idx++;
-      else if (st.requeue.length){ st.isRequeue = true; st.reqIdx = 0; }
-      else st.idx = st.primaryQueue.length;
+      if (st.idx + 1 < st.primaryQueue.length){
+        st.idx++;
+      } else if (st.requeue.length){
+        st.isRequeue = true;
+        st.reqIdx = 0;
+      } else {
+        st.idx = st.primaryQueue.length;
+      }
     }
 
     pickNextActive();
     refresh();
   }
 
-  function rateWithLabel(label, quality){
-    const card = currentCard();
-    if (!card) return;
+function rateWithLabel(label, quality){
+  const card = currentCard();
+  if (!card) return;
 
-    const ok = quality >= 3;
-    const newCard = sm2(card, quality);
-    newCard.seenCount = (card.seenCount || 0) + 1;
-    newCard.lastSeenOn = todayStr();
+  if (label === "again"){
+    const current = DATA.decks[card.deckId]?.cards?.find(c => c.id === card.id) || card;
 
-    const wasWrong = (st.result === "wrong");
-    if (wasWrong || label==="again" || label==="hard"){
-      newCard.wrongCount = (card.wrongCount||0) + 1;
-    } else if (quality >= 4){
-      newCard.wrongCount = 0;
-    } else {
-      newCard.wrongCount = card.wrongCount || 0;
-    }
+    const newCard = {
+      ...current,
+      seenCount: (current.seenCount || 0) + 1,
+      lastSeenOn: todayStr(),
+      wrongCount: (current.wrongCount || 0) + 1,
+      inWrongDeck: true,
+      mastered: false,
+      adaptiveMode: ((current.wrongCount || 0) + 1) >= (current.adaptiveThreshold ?? 3)
+        ? decideAdaptiveMode({ ...current, wrongCount: (current.wrongCount || 0) + 1 })
+        : "typed"
+    };
 
-    if (card.mastered && (label === "again" || label === "hard")){
-      newCard.mastered = false;
-      newCard.inWrongDeck = true;
-    } else if (label === "again"){
-      newCard.inWrongDeck = true;
-    } else if (label === "mastered"){
-      newCard.inWrongDeck = false;
-      newCard.mastered = true;
-    }
+    const dk = DATA.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(c => c.id === card.id);
+    if (ci >= 0) dk.cards[ci] = newCard;
 
-    const threshold = newCard.adaptiveThreshold ?? 3;
-    newCard.adaptiveMode = ((newCard.wrongCount||0) >= threshold) ? decideAdaptiveMode(newCard) : "typed";
+    const t = st.today;
+    if (!DATA.stats[t]) DATA.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
+    DATA.stats[t].reviewed += 1;
+    DATA.stats[t].wrong += 1;
 
-    updateData(d=>{
-      const dk = d.decks[card.deckId];
-      const ci = dk?.cards?.findIndex(c=>c.id===card.id);
-      if (ci>=0) dk.cards[ci] = newCard;
-
-      const t = st.today;
-      if (!d.stats[t]) d.stats[t] = {reviewed:0,correct:0,wrong:0};
-      d.stats[t].reviewed += 1;
-      if (ok) d.stats[t].correct += 1; else d.stats[t].wrong += 1;
-    });
+    saveData(DATA);
 
     st.sess.total += 1;
-    st.sess.correct += ok ? 1 : 0;
-    st.sess.wrong += ok ? 0 : 1;
+    st.sess.wrong += 1;
+    st.sess.requeues += 1;
 
-    if (st.isCustomMode){
-      // Custom mode: Again/Hard = requeue (repeat later). Good/Easy/Mastered = done forever.
-      if (label === "again" || label === "hard"){
-        st.sess.requeues += 1;
-        if (!st.requeue.some(c=>c.id===card.id)){
-          st.requeue.push({...newCard, deckId: card.deckId});
-        }
-      }
-      // No learning delays in custom mode
-    } else {
-      const delay = computeLearningDelayMs(label);
-      if (delay > 0){
-        st.learning.push({ card: {...newCard, deckId: card.deckId}, dueTimeMs: nowMs() + delay });
-      }
-      if (newCard.inWrongDeck && label !== "mastered"){
-        st.sess.requeues += 1;
-        if (!st.requeue.some(c=>c.id===newCard.id)){
-          st.requeue.push({...newCard, deckId: card.deckId});
-        }
-      }
-    }
 
-    if (st.active?.source === "learning" && st.active.learningIndex >= 0){
-      st.learning.splice(st.active.learningIndex, 1);
-    }
 
-    advance();
+    st.input = "";
+    st.result = null;
+    st.mc = null;
+    st.mcPicked = null;
+    st.phase = "question";
+    st.revealedBySpace = false;
+    st.active = {
+      card: { ...newCard, deckId: card.deckId },
+      source: st.active?.source || "primary",
+      learningIndex: -1
+    };
+    st.justAdvanced = true;
+
+    refresh();
+    return;
   }
 
+  const ok = quality >= 3;
+  const newCard = sm2(card, quality);
+  newCard.seenCount = (card.seenCount || 0) + 1;
+  newCard.lastSeenOn = todayStr();
+
+  const wasWrong = (st.result === "wrong");
+  if (wasWrong || label === "hard"){
+    newCard.wrongCount = (card.wrongCount || 0) + 1;
+  } else if (quality >= 4){
+    newCard.wrongCount = 0;
+  } else {
+    newCard.wrongCount = card.wrongCount || 0;
+  }
+
+  if (card.mastered && label === "hard"){
+    newCard.mastered = false;
+    newCard.inWrongDeck = true;
+  } else if (label === "mastered"){
+    newCard.inWrongDeck = false;
+    newCard.mastered = true;
+  }
+
+  const threshold = newCard.adaptiveThreshold ?? 3;
+  newCard.adaptiveMode =
+    ((newCard.wrongCount || 0) >= threshold) ? decideAdaptiveMode(newCard) : "typed";
+
+  updateData(d => {
+    const dk = d.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(c => c.id === card.id);
+    if (ci >= 0) dk.cards[ci] = newCard;
+
+    const t = st.today;
+    if (!d.stats[t]) d.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
+    d.stats[t].reviewed += 1;
+    if (ok) d.stats[t].correct += 1;
+    else d.stats[t].wrong += 1;
+  });
+
+  st.sess.total += 1;
+  st.sess.correct += ok ? 1 : 0;
+  st.sess.wrong += ok ? 0 : 1;
+
+  if (st.isCustomMode){
+    if (label === "hard"){
+      st.sess.requeues += 1;
+      st.requeue.push({ ...newCard, deckId: card.deckId });
+    }
+  } else {
+    if (label === "hard" && !st.isRequeue){
+      st.learning.push({
+        card: { ...newCard, deckId: card.deckId },
+        dueAfterTotal: st.sess.total + 3
+      });
+    }
+
+    if (newCard.inWrongDeck && label !== "mastered"){
+      st.sess.requeues += 1;
+      if (st.isRequeue && st.reqIdx < st.requeue.length){
+        st.requeue.splice(st.reqIdx, 1);
+      } else {
+        st.requeue = st.requeue.filter(c => c.id !== newCard.id);
+      }
+      st.requeue.push({ ...newCard, deckId: card.deckId });
+    }
+  }
+
+  if (st.active?.source === "learning" && st.active.learningIndex >= 0){
+    st.learning.splice(st.active.learningIndex, 1);
+  }
+
+  if (st.isRequeue && (label === "good" || label === "easy" || label === "mastered")){
+    st.reqIdx++;
+  }
+
+  advance();
+}
+
   checkBtn.onclick = doCheckTyped;
+  if (revealBtn) revealBtn.onclick = revealAnswerNeutral;
+
   ansInput.oninput = (e)=>{ st.input = e.target.value; };
-  ansInput.onkeydown = (e)=>{ if (e.key === "Enter") doCheckTyped(); };
+  ansInput.onkeydown = (e)=>{
+    if (e.key === "Enter") doCheckTyped();
+  };
 
   document.querySelectorAll("[data-rate]").forEach(btn=>{
     btn.onclick = ()=>{
       const id = btn.dataset.rate;
-      if (id==="again")    rateWithLabel("again", 0);
-      if (id==="hard")     rateWithLabel("hard",  1);
-      if (id==="good")     rateWithLabel("good",  3);
-      if (id==="easy")     rateWithLabel("easy",  4);
-      if (id==="mastered") rateWithLabel("mastered", 5);
+      if (id === "again") rateWithLabel("again", 0);
+      if (id === "hard") rateWithLabel("hard", 1);
+      if (id === "good") rateWithLabel("good", 3);
+      if (id === "easy") rateWithLabel("easy", 4);
+      if (id === "mastered") rateWithLabel("mastered", 5);
     };
   });
 
   window.__studyKeyHandler = (e)=>{
     if (SCREEN !== "study") return;
-    if (e.target && (e.target.tagName==="TEXTAREA" || e.target.tagName==="INPUT")) return;
+
+    const isTypingField =
+      e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT");
 
     const card = currentCard();
     if (!card) return;
@@ -3544,9 +2413,9 @@ function bindStudy(){
       return;
     }
 
-    if (e.code === "Space"){
+    if (e.code === "Space" && !isTypingField){
       e.preventDefault();
-      if (st.phase === "question") revealBySpace();
+      if (st.phase === "question") revealAnswerNeutral();
       return;
     }
 
@@ -3558,24 +2427,14 @@ function bindStudy(){
       if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
     }
   };
+
   window.addEventListener("keydown", window.__studyKeyHandler);
 
   pickNextActive();
-  // Only update the timer text — no full re-render every tick
-  window.__studyInterval = setInterval(()=>{
-    const timerEl = document.getElementById("stimer");
-    if (timerEl && st.sessionStartedAt){
-      const sec = Math.floor((nowMs() - st.sessionStartedAt)/1000);
-      timerEl.textContent = `${String(Math.floor(sec/60)).padStart(2,"0")}:${String(sec%60).padStart(2,"0")}`;
-    }
-    // Also drain learning queue when cards become due
-    if (st && st.learning?.length){
-      const hasDue = st.learning.some(x => x.dueTimeMs <= nowMs());
-      if (hasDue) refresh();
-    }
-  }, 1000);
+  window.__studyInterval = setInterval(()=>{ refresh(); }, 800);
   refresh();
 }
+
 
 
 /******************************************************************
@@ -3593,15 +2452,6 @@ function exportData(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-function autoBackupToLocalStorage(){
-  try{
-    localStorage.setItem(BACKUP_KEY, JSON.stringify(DATA));
-    console.log("Daily backup saved silently to localStorage");
-  }catch(err){
-    console.error("Auto backup failed:", err);
-  }
 }
 
 function importData(file){
@@ -3626,17 +2476,10 @@ function importData(file){
             d.stats[day].wrong    = Math.max(d.stats[day].wrong||0,    st.wrong||0);
           }
         }
-      if (parsed.settings){
-  d.settings = {
-    ...d.settings,
-    ...parsed.settings,
-    appStartDate: parsed.settings.appStartDate
-      ? ((d.settings.appStartDate && d.settings.appStartDate < parsed.settings.appStartDate)
-          ? d.settings.appStartDate
-          : parsed.settings.appStartDate)
-      : d.settings.appStartDate
-  };
-}
+        if (parsed.settings?.appStartDate){
+          const cur = d.settings.appStartDate || todayStr();
+          d.settings.appStartDate = parsed.settings.appStartDate < cur ? parsed.settings.appStartDate : cur;
+        }
       });
       alert("Import successful! Your data has been merged.");
     }catch(err){
@@ -3657,33 +2500,11 @@ function bindNav(){
   const resetAllBtn = document.getElementById("resetAllBtn");
   if (resetAllBtn) resetAllBtn.onclick = hardResetAll;
 
-const exportBtn = document.getElementById("exportBtn");
-if (exportBtn) exportBtn.onclick = exportData;
+  const exportBtn = document.getElementById("exportBtn");
+  if (exportBtn) exportBtn.onclick = exportData;
 
-const restoreBackupBtn = document.getElementById("restoreBackupBtn");
-if (restoreBackupBtn){
-  restoreBackupBtn.onclick = ()=>{
-    const backupRaw = localStorage.getItem(BACKUP_KEY);
-    if (!backupRaw){
-      alert("No backup found.");
-      return;
-    }
-    if (!confirm("Restore the last local backup? This will replace the current in-browser data.")) return;
-
-    try{
-      const parsed = JSON.parse(backupRaw);
-      DATA = normalizeData(parsed);
-      saveData(DATA);
-      render();
-      alert("Backup restored.");
-    }catch(err){
-      alert("Backup restore failed: " + err.message);
-    }
-  };
-}
-
-const importFile = document.getElementById("importFile");
-if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.target.value=""; };
+  const importFile = document.getElementById("importFile");
+  if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.target.value=""; };
 
   const modeSel = document.getElementById("studyModeSel");
   if (modeSel) modeSel.onchange = ()=> updateData(d=>{ d.settings.studyMode = modeSel.value; });
@@ -3717,7 +2538,7 @@ if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.
   }
 }
 
-setInterval(handleDayRollover, 300000); // check every 5 min instead of 30s
+setInterval(handleDayRollover, 30000);
 render();
 </script>
 </body>
