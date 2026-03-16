@@ -1909,11 +1909,9 @@ function studyHTML(){
     `;
   }
 
-  // For custom mode: updateData() triggers render() on every card rating which would
-  // reset idx back to 0 and replay cards. Preserve live session state across re-renders.
-  if (isCustomMode && window.__study && window.__study.isCustomMode) {
-    // Preserve ALL progress state — only the HTML shell re-renders around it
-  } else {
+  const existingStudy = window.__study;
+  const shouldPreserve = existingStudy && existingStudy.dayKey === today && !!(existingStudy.isCustomMode) === !!(isCustomMode) && !existingStudy.freshReset;
+  if (!shouldPreserve) {
     window.__study = {
       today,
       dayKey: today,
@@ -1932,8 +1930,13 @@ function studyHTML(){
       revealedBySpace: false,
       active: null,
       justAdvanced: true,
-      isCustomMode
+      isCustomMode,
+      editMode: false,
+      skipCount: 0
     };
+  } else {
+    if (window.__study.editMode == null) window.__study.editMode = false;
+    if (window.__study.skipCount == null) window.__study.skipCount = 0;
   }
 
   return `
@@ -1950,6 +1953,7 @@ function studyHTML(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div style="font-size:12px;color:var(--muted);font-weight:900;white-space:nowrap" id="deckName"></div>
           <button class="btnSmall" id="starBtn">★ Star</button>
+          <button class="btnSmall" id="editCardBtn" style="color:var(--purple);border-color:rgba(129,140,248,.3)">✎ Edit</button>
           <span class="tag purple" id="seenBadge" style="display:none"></span>
         </div>
       </div>
@@ -1988,6 +1992,32 @@ function studyHTML(){
           </div>
           <div class="hint" style="text-align:center">Again/Hard repeat soon · wrong-deck requeue until Mastered</div>
         </div>
+
+        <!-- edit panel -->
+        <div id="editPanel" style="display:none;flex-direction:column;gap:12px;background:var(--panel);border:1px solid rgba(129,140,248,.35);border-radius:16px;padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:.08em">✎ Edit Card</span>
+            <button class="btnSmall" id="cancelEditBtn">✕ Close</button>
+          </div>
+          <textarea class="textarea" id="studyEditFront" rows="2" placeholder="Front"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
+              + Front Image <input type="file" id="editFrontFile" accept="image/*" style="display:none"/>
+            </label>
+            <span id="editFrontImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
+            <button class="btnSmall btnDanger" id="clearEditFrontImg">Clear</button>
+          </div>
+          <textarea class="textarea" id="studyEditBack" rows="2" placeholder="Back"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
+              + Back Image <input type="file" id="editBackFile" accept="image/*" style="display:none"/>
+            </label>
+            <span id="editBackImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
+            <button class="btnSmall btnDanger" id="clearEditBackImg">Clear</button>
+          </div>
+          <button class="btnPrimary" id="saveEditBtn">Save Changes</button>
+        </div>
+
       </div>
 
       <div class="studyFoot">
@@ -2048,6 +2078,72 @@ function bindStudy(){
   const stimer       = document.getElementById("stimer");
 
   st.sessionStartedAt = st.sessionStartedAt || nowMs();
+  const editPanel = document.getElementById("editPanel");
+  const editCardBtn = document.getElementById("editCardBtn");
+  const cancelEditBtn = document.getElementById("cancelEditBtn");
+  const saveEditBtn = document.getElementById("saveEditBtn");
+  const studyEditFront = document.getElementById("studyEditFront");
+  const studyEditBack = document.getElementById("studyEditBack");
+  const editFrontFile = document.getElementById("editFrontFile");
+  const editBackFile = document.getElementById("editBackFile");
+  const editFrontImgStatus = document.getElementById("editFrontImgStatus");
+  const editBackImgStatus = document.getElementById("editBackImgStatus");
+  const clearEditFrontImg = document.getElementById("clearEditFrontImg");
+  const clearEditBackImg = document.getElementById("clearEditBackImg");
+
+  let draftEditFrontImg = null;
+  let draftEditBackImg = null;
+
+  function updateImgStatus(){
+    editFrontImgStatus.textContent = draftEditFrontImg ? "✓ image set" : "no image";
+    editFrontImgStatus.style.color = draftEditFrontImg ? "var(--green)" : "var(--muted2)";
+    editBackImgStatus.textContent = draftEditBackImg ? "✓ image set" : "no image";
+    editBackImgStatus.style.color = draftEditBackImg ? "var(--green)" : "var(--muted2)";
+  }
+
+  if (editCardBtn) editCardBtn.onclick = ()=>{
+    const card = currentCard(); if (!card) return;
+    const live = DATA.decks[card.deckId]?.cards?.find(c=>c.id===card.id)||card;
+    studyEditFront.value = live.front||"";
+    studyEditBack.value = live.back||"";
+    draftEditFrontImg = live.frontImage||null;
+    draftEditBackImg = live.backImage||null;
+    updateImgStatus();
+    editPanel.style.display = editPanel.style.display==="flex" ? "none" : "flex";
+  };
+
+  if (cancelEditBtn) cancelEditBtn.onclick = ()=>{ editPanel.style.display="none"; };
+
+  if (editFrontFile) editFrontFile.onchange = async (e)=>{
+    const file = e.target.files?.[0]; if (!file) return;
+    draftEditFrontImg = await fileToBase64(file);
+    updateImgStatus();
+  };
+
+  if (editBackFile) editBackFile.onchange = async (e)=>{
+    const file = e.target.files?.[0]; if (!file) return;
+    draftEditBackImg = await fileToBase64(file);
+    updateImgStatus();
+  };
+
+  if (clearEditFrontImg) clearEditFrontImg.onclick = ()=>{ draftEditFrontImg=null; updateImgStatus(); };
+  if (clearEditBackImg) clearEditBackImg.onclick = ()=>{ draftEditBackImg=null; updateImgStatus(); };
+
+  if (saveEditBtn) saveEditBtn.onclick = ()=>{
+    const card = currentCard(); if (!card) return;
+    const nf = studyEditFront.value.trim();
+    const nb = studyEditBack.value.trim();
+    if (!nf||!nb){ alert("Front and back required."); return; }
+    const dk = DATA.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(c=>c.id===card.id);
+    if (ci>=0) dk.cards[ci] = {...dk.cards[ci], front:nf, back:nb, frontImage:draftEditFrontImg, backImage:draftEditBackImg};
+    if (st.active?.card){ st.active.card.front=nf; st.active.card.back=nb; st.active.card.frontImage=draftEditFrontImg; st.active.card.backImage=draftEditBackImg; }
+    const pqi = st.primaryQueue.findIndex(c=>c.id===card.id);
+    if (pqi>=0) st.primaryQueue[pqi] = {...st.primaryQueue[pqi], front:nf, back:nb, frontImage:draftEditFrontImg, backImage:draftEditBackImg};
+    saveData(DATA);
+    editPanel.style.display="none";
+    refresh();
+  };
 
   function getDeckCards(deckId){ return DATA.decks[deckId]?.cards || []; }
 
