@@ -1569,9 +1569,11 @@ function bindManage(){
   document.getElementById("backDash").onclick = ()=> setScreen("dashboard");
   const deckList = document.getElementById("deckList");
   const deckPanel = document.getElementById("deckPanel");
-  let selected = null;
-  let filter = "all";
-  let editingCardId = null;
+let selected = null;
+let filter = "all";
+let editingCardId = null;
+let draftFrontImg = null;
+let draftBackImg = null;
 
   function renderDeckList(){
     const entries = Object.entries(DATA.decks);
@@ -1687,7 +1689,12 @@ function bindManage(){
       selected = null;
       editingCardId = null;
     };
-    deckPanel.querySelector("#newCardBtn").onclick = ()=>{ editingCardId = "__new__"; renderPanel(); };
+    deckPanel.querySelector("#newCardBtn").onclick = ()=>{
+  draftFrontImg = null;
+  draftBackImg = null;
+  editingCardId = "__new__";
+  renderPanel();
+};
     deckPanel.querySelectorAll("[data-star]").forEach(btn=>{
       btn.onclick = ()=> updateData(d=>{
         const c = d.decks[selected].cards.find(x=>x.id===btn.dataset.star);
@@ -1695,7 +1702,12 @@ function bindManage(){
       });
     });
     deckPanel.querySelectorAll("[data-edit]").forEach(btn=>{
-      btn.onclick = ()=>{ editingCardId = btn.dataset.edit; renderPanel(); };
+      btn.onclick = ()=>{
+  draftFrontImg = null;
+  draftBackImg = null;
+  editingCardId = btn.dataset.edit;
+  renderPanel();
+};
     });
     deckPanel.querySelectorAll("[data-del]").forEach(btn=>{
       btn.onclick = ()=>{
@@ -1725,9 +1737,12 @@ function bindManage(){
 
     const editBox = deckPanel.querySelector("#editBox");
     if (editingCardId){
-      const isNew = editingCardId === "__new__";
-      const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
-      if (!c) return;
+  const isNew = editingCardId === "__new__";
+  const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
+  if (!c) return;
+
+  if (draftFrontImg === null) draftFrontImg = c.frontImage || null;
+  if (draftBackImg === null) draftBackImg = c.backImage || null;
       editBox.innerHTML = `
         <div class="box" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1742,7 +1757,7 @@ function bindManage(){
               <div id="frontPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
               <input type="file" id="frontFile" accept="image/*" style="margin-top:10px" />
               <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                ${c.frontImage ? `<img class="imgThumb" src="${c.frontImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+                ${draftFrontImg ? `<img class="imgThumb" src="${draftFrontImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
                 <button class="btnSmall btnDanger" id="clearFrontImg">Clear</button>
               </div>
             </div>
@@ -1753,7 +1768,7 @@ function bindManage(){
               <div id="backPaste" class="upload" style="padding:14px" tabindex="0">Paste image here</div>
               <input type="file" id="backFile" accept="image/*" style="margin-top:10px" />
               <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                ${c.backImage ? `<img class="imgThumb" src="${c.backImage}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
+                ${draftBackImg ? `<img class="imgThumb" src="${draftBackImg}" />` : `<span class="tiny" style="color:var(--muted)">No image</span>`}
                 <button class="btnSmall btnDanger" id="clearBackImg">Clear</button>
               </div>
             </div>
@@ -1768,37 +1783,97 @@ function bindManage(){
           </div>
         </div>
       `;
-      deckPanel.querySelector("#closeEdit").onclick = ()=>{ editingCardId = null; renderPanel(); };
-      const frontPaste = deckPanel.querySelector("#frontPaste");
-      const backPaste = deckPanel.querySelector("#backPaste");
-      let frontImg = c.frontImage || null;
-      let backImg = c.backImage || null;
-      frontPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ frontImg = b64; renderPanel(); } };
-      backPaste.onpaste = async (e)=>{ const b64 = await clipboardImageToBase64(e); if (b64){ backImg = b64; renderPanel(); } };
-      deckPanel.querySelector("#frontFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ frontImg = await fileToBase64(file); renderPanel(); } };
-      deckPanel.querySelector("#backFile").onchange = async (e)=>{ const file = e.target.files?.[0]; if (file){ backImg = await fileToBase64(file); renderPanel(); } };
-      deckPanel.querySelector("#clearFrontImg").onclick = ()=>{ frontImg=null; renderPanel(); };
-      deckPanel.querySelector("#clearBackImg").onclick = ()=>{ backImg=null; renderPanel(); };
-      deckPanel.querySelector("#saveCard").onclick = ()=>{
-        const nf = deckPanel.querySelector("#efront").value.trim();
-        const nb = deckPanel.querySelector("#eback").value.trim();
-        const pref = deckPanel.querySelector("#prefMode").value;
-        if (!nf && !frontImg) { alert("Add front text or image."); return; }
-        if (!nb && !backImg) { alert("Add back text or image."); return; }
-        updateData(d=>{
-          const deckRef = d.decks[selected];
-          if (isNew){
-            const idx = deckRef.cards.length;
-            const nc = makeCard({ id: String(Date.now()), front: nf, back: nb, frontImage: frontImg, backImage: backImg, createdAtIdx: idx });
-            nc.adaptivePref = pref;
-            deckRef.cards.push(nc);
-          }else{
-            const idx = deckRef.cards.findIndex(x=>x.id===c.id);
-            if (idx>=0) deckRef.cards[idx] = { ...deckRef.cards[idx], front: nf, back: nb, frontImage: frontImg, backImage: backImg, adaptivePref: pref };
-          }
-        });
-        editingCardId = null;
-      };
+      deckPanel.querySelector("#closeEdit").onclick = ()=>{
+  draftFrontImg = null;
+  draftBackImg = null;
+  editingCardId = null;
+  renderPanel();
+};
+   const frontPaste = deckPanel.querySelector("#frontPaste");
+const backPaste = deckPanel.querySelector("#backPaste");
+
+frontPaste.onpaste = async (e)=>{
+  const b64 = await clipboardImageToBase64(e);
+  if (b64){
+    draftFrontImg = b64;
+    renderPanel();
+  }
+};
+
+backPaste.onpaste = async (e)=>{
+  const b64 = await clipboardImageToBase64(e);
+  if (b64){
+    draftBackImg = b64;
+    renderPanel();
+  }
+};
+
+deckPanel.querySelector("#frontFile").onchange = async (e)=>{
+  const file = e.target.files?.[0];
+  if (file){
+    draftFrontImg = await fileToBase64(file);
+    renderPanel();
+  }
+};
+
+deckPanel.querySelector("#backFile").onchange = async (e)=>{
+  const file = e.target.files?.[0];
+  if (file){
+    draftBackImg = await fileToBase64(file);
+    renderPanel();
+  }
+};
+
+deckPanel.querySelector("#clearFrontImg").onclick = ()=>{
+  draftFrontImg = null;
+  renderPanel();
+};
+
+deckPanel.querySelector("#clearBackImg").onclick = ()=>{
+  draftBackImg = null;
+  renderPanel();
+};
+     deckPanel.querySelector("#saveCard").onclick = ()=>{
+  const nf = deckPanel.querySelector("#efront").value.trim();
+  const nb = deckPanel.querySelector("#eback").value.trim();
+  const pref = deckPanel.querySelector("#prefMode").value;
+
+  if (!nf && !draftFrontImg) { alert("Add front text or image."); return; }
+  if (!nb && !draftBackImg) { alert("Add back text or image."); return; }
+
+  updateData(d=>{
+    const deckRef = d.decks[selected];
+    if (isNew){
+      const idx = deckRef.cards.length;
+      const nc = makeCard({
+        id: String(Date.now()),
+        front: nf,
+        back: nb,
+        frontImage: draftFrontImg,
+        backImage: draftBackImg,
+        createdAtIdx: idx
+      });
+      nc.adaptivePref = pref;
+      deckRef.cards.push(nc);
+    }else{
+      const idx = deckRef.cards.findIndex(x=>x.id===c.id);
+      if (idx>=0){
+        deckRef.cards[idx] = {
+          ...deckRef.cards[idx],
+          front: nf,
+          back: nb,
+          frontImage: draftFrontImg,
+          backImage: draftBackImg,
+          adaptivePref: pref
+        };
+      }
+    }
+  });
+
+  draftFrontImg = null;
+  draftBackImg = null;
+  editingCardId = null;
+};
     }
   }
 
