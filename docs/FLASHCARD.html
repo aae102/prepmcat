@@ -1844,6 +1844,8 @@ function bindManage(){
             style="color:var(--cyan);border-color:rgba(34,211,238,.28);${bulkOpen?'background:rgba(34,211,238,.10)':''}">
             ⊕ Bulk Add
           </button>
+     
+          <button class="btnSmall" id="exportDeckBtn" style="color:var(--green);border-color:rgba(74,222,128,.25)">↓ Share Deck</button>
           <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
         </div>
       </div>
@@ -1881,6 +1883,7 @@ function bindManage(){
     `;
 
     // ── Bulk Add toggle ──────────────────────────────────────
+    deckPanel.querySelector("#exportDeckBtn").onclick = () => exportDeck(selected);
     deckPanel.querySelector("#bulkAddToggleBtn").onclick = ()=>{
       bulkOpen = !bulkOpen;
       if (!bulkOpen) bulkCards = [];
@@ -2889,6 +2892,44 @@ if (studyPasteBackBtn) {
 /******************************************************************
  * IMPORT / EXPORT
  ******************************************************************/
+ function exportDeck(deckId){
+  const deck = DATA.decks[deckId];
+  if (!deck) return;
+  const cards = (deck.cards || []).filter(c => c.front && c.back);
+  const name = deck.name || "deck";
+
+  const fmt = prompt(
+    `Export "${name}" (${cards.length} cards)\n\nEnter format:\n  1 = Tab-separated (re-importable into RECALL)\n  2 = Q/A text\n  3 = CSV`,
+    "1"
+  );
+  if (!fmt) return;
+
+  let content = "", ext = "txt", mime = "text/plain";
+
+  if (fmt.trim() === "1"){
+    content = cards.map(c => `${c.front}\t${c.back}`).join("\n");
+    ext = "txt";
+  } else if (fmt.trim() === "2"){
+    content = cards.map((c,i) => `Q: ${c.front}\nA: ${c.back}`).join("\n\n");
+    ext = "txt";
+  } else if (fmt.trim() === "3"){
+    const esc = s => `"${String(s).replace(/"/g,'""')}"`;
+    content = "Front,Back\n" + cards.map(c => `${esc(c.front)},${esc(c.back)}`).join("\n");
+    ext = "csv"; mime = "text/csv";
+  } else {
+    alert("Invalid choice."); return;
+  }
+
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name.replace(/[^a-z0-9]/gi,"_")}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 function exportData(){
   const json = JSON.stringify(DATA, null, 2);
   const blob = new Blob([json], {type:"application/json"});
