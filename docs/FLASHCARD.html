@@ -233,6 +233,33 @@
       transition:opacity .2s;
     }
     .startCustomBtn:disabled{opacity:.35;cursor:default}
+
+    /* ── Bulk Add ── */
+    @keyframes slideDown{
+      from{opacity:0;transform:translateY(-8px)}
+      to{opacity:1;transform:translateY(0)}
+    }
+    .bulkPanel{
+      background:var(--panel2);
+      border:1px solid rgba(34,211,238,.30);
+      border-radius:16px;
+      padding:20px 18px;
+      margin-bottom:14px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      animation:slideDown .18s ease;
+    }
+    .bulkPreviewRow{
+      display:flex;gap:8px;padding:7px 8px;
+      background:var(--panel2);border-radius:8px;
+      border:1px solid var(--border);font-size:12px;
+      align-items:flex-start;
+    }
+    .bulkPreviewRow.dup{border-color:rgba(251,146,60,.25);background:rgba(251,146,60,.06)}
+    .bulkNum{font-family:'IBM Plex Mono',monospace;color:var(--muted2);font-size:10px;min-width:22px;flex-shrink:0;padding-top:2px}
+    .bulkPreviewF{font-weight:900;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bulkPreviewB{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   </style>
 </head>
 
@@ -1283,7 +1310,6 @@ function bindCustom(){
       const id = cb.dataset.cid;
       if (cb.checked) CUSTOM_SELECTED.add(id);
       else CUSTOM_SELECTED.delete(id);
-      // Lightweight update: just re-render (fast)
       render();
     };
   });
@@ -1378,9 +1404,7 @@ function addHTML(){
       <div style="margin-bottom:16px">
         <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Import Method</div>
         <div class="modeRow">
-         
           <button class="modeBtn" data-mode="text">✎ Paste Text</button>
-    
         </div>
       </div>
       <div class="box" style="margin-bottom:14px">
@@ -1569,11 +1593,16 @@ function bindManage(){
   document.getElementById("backDash").onclick = ()=> setScreen("dashboard");
   const deckList = document.getElementById("deckList");
   const deckPanel = document.getElementById("deckPanel");
-let selected = null;
-let filter = "all";
-let editingCardId = null;
-let draftFrontImg = null;
-let draftBackImg = null;
+  let selected = null;
+  let filter = "all";
+  let editingCardId = null;
+  let draftFrontImg = null;
+  let draftBackImg = null;
+
+  // ── Bulk Add State ──────────────────────────────────────────
+  let bulkOpen = false;
+  let bulkMode = "text";   // "text" | "file"
+  let bulkCards = [];      // parsed preview cards
 
   function renderDeckList(){
     const entries = Object.entries(DATA.decks);
@@ -1597,9 +1626,181 @@ let draftBackImg = null;
       `;
     }).join("");
     deckList.querySelectorAll("[data-deck]").forEach(el=>{
-      el.onclick = ()=>{ selected = el.dataset.deck; editingCardId=null; renderDeckList(); renderPanel(); };
+      el.onclick = ()=>{
+        selected = el.dataset.deck;
+        editingCardId = null;
+        bulkOpen = false;
+        bulkCards = [];
+        renderDeckList();
+        renderPanel();
+      };
     });
     renderPanel();
+  }
+
+  function renderBulkPanel(container){
+    const existingKeys = new Set(
+      (DATA.decks[selected]?.cards||[]).map(c=> c.front.trim()+"||"+c.back.trim())
+    );
+    const newCount = bulkCards.filter(c=>!existingKeys.has(c.front.trim()+"||"+c.back.trim())).length;
+    const dupCount = bulkCards.length - newCount;
+
+    const previewRows = bulkCards.map((c,i)=>{
+      const isDup = existingKeys.has(c.front.trim()+"||"+c.back.trim());
+      return `<div class="bulkPreviewRow${isDup?' dup':''}">
+        <span class="bulkNum">${i+1}</span>
+        <span class="bulkPreviewF">${escapeHTML(c.front)}</span>
+        <span style="color:var(--muted2);flex-shrink:0;font-size:11px">→</span>
+        <span class="bulkPreviewB">${escapeHTML(c.back)}</span>
+        ${isDup?`<span style="font-size:10px;color:var(--orange);background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.25);border-radius:4px;padding:1px 6px;font-weight:900;flex-shrink:0">dup</span>`:''}
+      </div>`;
+    }).join("");
+
+    container.innerHTML = `
+      <div class="bulkPanel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span style="font-size:13px;font-weight:900;color:var(--cyan);text-transform:uppercase;letter-spacing:.08em">⊕ Bulk Add Cards to "${escapeHTML(DATA.decks[selected]?.name||'')}"</span>
+          <button class="btnSmall" id="closeBulkBtn">✕ Close</button>
+        </div>
+
+        <!-- Mode tabs -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btnSmall" id="bulkTabText" style="${bulkMode==='text'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">✎ Paste Text</button>
+          <button class="btnSmall" id="bulkTabFile" style="${bulkMode==='file'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">↑ Upload File (PDF / Excel / CSV)</button>
+        </div>
+
+        <!-- Input area -->
+        ${bulkMode==='text' ? `
+          <div>
+            <textarea class="textarea" id="bulkTextArea" rows="7"
+              placeholder="Paste any format — all are auto-detected:\n\nTerm - Definition\nQ: Question\nA: Answer\nFront[TAB]Back\nFront | Back"></textarea>
+            <button class="btnSmall" id="bulkParseBtn"
+              style="margin-top:8px;color:var(--purple);border-color:rgba(129,140,248,.3);padding:7px 16px">
+              ▶ Preview Cards
+            </button>
+          </div>
+        ` : `
+          <div>
+            <div class="upload" id="bulkUploadZone" style="padding:18px 14px">
+              <div style="font-size:22px;margin-bottom:6px">◉</div>
+              <div style="color:var(--muted);font-weight:900">Click to upload PDF, .xlsx, or .csv</div>
+            </div>
+            <input type="file" id="bulkFileInput" accept=".pdf,.xlsx,.xls,.csv" style="display:none"/>
+          </div>
+        `}
+
+        <!-- Preview -->
+        ${bulkCards.length ? `
+          <div>
+            <div style="font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">
+              Preview — ${bulkCards.length} parsed ·
+              <span style="color:var(--cyan)">${newCount} new</span> ·
+              <span style="color:var(--orange)">${dupCount} duplicate${dupCount!==1?'s':''}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;
+              background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:8px 10px">
+              ${previewRows}
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button id="bulkAddNewBtn"
+              style="padding:9px 18px;background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.35);
+                border-radius:9px;color:var(--cyan);font-weight:900;font-size:13px;${newCount===0?'opacity:.4;cursor:default':''}"
+              ${newCount===0?'disabled':''}>
+              + Add ${newCount} New Card${newCount!==1?'s':''}
+            </button>
+            <button id="bulkAddAllBtn"
+              style="padding:9px 18px;background:transparent;border:1px solid var(--border);
+                border-radius:9px;color:var(--muted);font-weight:900;font-size:13px;">
+              Add All ${bulkCards.length} (incl. duplicates)
+            </button>
+            <button class="btnSmall btnDanger" id="bulkClearBtn">Clear</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    // bind close
+    container.querySelector("#closeBulkBtn").onclick = ()=>{
+      bulkOpen = false; bulkCards = []; renderPanel();
+    };
+
+    // bind tabs
+    container.querySelector("#bulkTabText").onclick = ()=>{ bulkMode="text"; bulkCards=[]; renderBulkPanel(container); };
+    container.querySelector("#bulkTabFile").onclick = ()=>{ bulkMode="file"; bulkCards=[]; renderBulkPanel(container); };
+
+    if (bulkMode==="text"){
+      const ta = container.querySelector("#bulkTextArea");
+      container.querySelector("#bulkParseBtn").onclick = ()=>{
+        const text = (ta?.value||"").trim();
+        if (!text){ alert("Paste some text first."); return; }
+        const parsed = parseCardsFromTextSmart(text)
+          .map(c=>({front:(c.front||"").slice(0,500), back:(c.back||"").slice(0,500)}))
+          .filter(c=>c.front && c.back);
+        if (!parsed.length){ alert("Could not parse any cards.\n\nTry: Term - Definition, or Q:/A: format, or Tab-separated."); return; }
+        bulkCards = parsed;
+        renderBulkPanel(container);
+      };
+    } else {
+      const zone = container.querySelector("#bulkUploadZone");
+      const fi   = container.querySelector("#bulkFileInput");
+      if (zone) zone.onclick = ()=> fi?.click();
+      if (fi) fi.onchange = async (e)=>{
+        const file = e.target.files?.[0]; if (!file) return;
+        if (zone) zone.innerHTML = `<div style="color:var(--muted);font-weight:900">Processing "${escapeHTML(file.name)}"…</div>`;
+        try{
+          let parsed = [];
+          if (file.name.match(/\.pdf$/i)){
+            const lines = await extractLinesFromPDF(file);
+            parsed = parseCardsFromTextSmart(lines.join("\n"));
+          } else {
+            parsed = await extractCardsFromSpreadsheet(file);
+          }
+          bulkCards = parsed
+            .map(c=>({front:(c.front||"").slice(0,500), back:(c.back||"").slice(0,500)}))
+            .filter(c=>c.front && c.back);
+          if (!bulkCards.length) alert("No card pairs found in this file.");
+        }catch(err){
+          alert("Error reading file: " + err.message);
+          bulkCards = [];
+        }
+        renderBulkPanel(container);
+      };
+    }
+
+    function doCommit(inclDups){
+      const existingKeys2 = new Set(
+        (DATA.decks[selected]?.cards||[]).map(c=> c.front.trim()+"||"+c.back.trim())
+      );
+      const toAdd = inclDups
+        ? bulkCards
+        : bulkCards.filter(c=>!existingKeys2.has(c.front.trim()+"||"+c.back.trim()));
+      if (!toAdd.length){ alert("No cards to add."); return; }
+      updateData(d=>{
+        const dk = d.decks[selected];
+        const startIdx = dk.cards.length;
+        toAdd.forEach((c,i)=>{
+          dk.cards.push(makeCard({
+            id: `${Date.now()}_bulk_${i}_${Math.random().toString(36).slice(2)}`,
+            front: c.front,
+            back: c.back,
+            createdAtIdx: startIdx + i
+          }));
+        });
+      });
+      const deckName = DATA.decks[selected]?.name || "";
+      bulkOpen = false;
+      bulkCards = [];
+      alert(`✓ Added ${toAdd.length} card${toAdd.length!==1?'s':''} to "${deckName}"`);
+      // updateData already called render(), panel is fresh
+    }
+
+    const addNewBtn = container.querySelector("#bulkAddNewBtn");
+    const addAllBtn = container.querySelector("#bulkAddAllBtn");
+    const clearBtn  = container.querySelector("#bulkClearBtn");
+    if (addNewBtn) addNewBtn.onclick = ()=> doCommit(false);
+    if (addAllBtn) addAllBtn.onclick = ()=> doCommit(true);
+    if (clearBtn)  clearBtn.onclick  = ()=>{ bulkCards=[]; renderBulkPanel(container); };
   }
 
   function renderPanel(){
@@ -1639,6 +1840,10 @@ let draftBackImg = null;
             <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
           </select>
           <button class="btnSmall" id="newCardBtn">+ Card</button>
+          <button class="btnSmall" id="bulkAddToggleBtn"
+            style="color:var(--cyan);border-color:rgba(34,211,238,.28);${bulkOpen?'background:rgba(34,211,238,.10)':''}">
+            ⊕ Bulk Add
+          </button>
           <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
         </div>
       </div>
@@ -1646,6 +1851,7 @@ let draftBackImg = null;
         ${pill("all")} ${pill("due")} ${pill("unseen")} ${pill("mastered")}
         <span style="margin-left:auto;color:var(--muted);font-size:12px;font-weight:900">${vis.length} shown</span>
       </div>
+      <div id="bulkPanelContainer"></div>
       <div id="editBox"></div>
       <div class="list">
         ${vis.map((c,i)=>`
@@ -1674,6 +1880,18 @@ let draftBackImg = null;
       </div>
     `;
 
+    // ── Bulk Add toggle ──────────────────────────────────────
+    deckPanel.querySelector("#bulkAddToggleBtn").onclick = ()=>{
+      bulkOpen = !bulkOpen;
+      if (!bulkOpen) bulkCards = [];
+      renderPanel();
+    };
+
+    // Render bulk panel if open
+    const bulkContainer = deckPanel.querySelector("#bulkPanelContainer");
+    if (bulkOpen && bulkContainer) renderBulkPanel(bulkContainer);
+
+    // ── Rest of panel bindings ───────────────────────────────
     deckPanel.querySelector("#deckOrderSel").onchange = (e)=>{
       updateData(d=>{ d.decks[selected].studyOrder = e.target.value; });
     };
@@ -1690,11 +1908,11 @@ let draftBackImg = null;
       editingCardId = null;
     };
     deckPanel.querySelector("#newCardBtn").onclick = ()=>{
-  draftFrontImg = null;
-  draftBackImg = null;
-  editingCardId = "__new__";
-  renderPanel();
-};
+      draftFrontImg = null;
+      draftBackImg = null;
+      editingCardId = "__new__";
+      renderPanel();
+    };
     deckPanel.querySelectorAll("[data-star]").forEach(btn=>{
       btn.onclick = ()=> updateData(d=>{
         const c = d.decks[selected].cards.find(x=>x.id===btn.dataset.star);
@@ -1703,11 +1921,11 @@ let draftBackImg = null;
     });
     deckPanel.querySelectorAll("[data-edit]").forEach(btn=>{
       btn.onclick = ()=>{
-  draftFrontImg = null;
-  draftBackImg = null;
-  editingCardId = btn.dataset.edit;
-  renderPanel();
-};
+        draftFrontImg = null;
+        draftBackImg = null;
+        editingCardId = btn.dataset.edit;
+        renderPanel();
+      };
     });
     deckPanel.querySelectorAll("[data-del]").forEach(btn=>{
       btn.onclick = ()=>{
@@ -1737,12 +1955,12 @@ let draftBackImg = null;
 
     const editBox = deckPanel.querySelector("#editBox");
     if (editingCardId){
-  const isNew = editingCardId === "__new__";
-  const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
-  if (!c) return;
+      const isNew = editingCardId === "__new__";
+      const c = isNew ? makeCard({id:String(Date.now()), front:"", back:"", createdAtIdx:(cardsAll.length||0)}) : editCard;
+      if (!c) return;
 
-  if (draftFrontImg === null) draftFrontImg = c.frontImage || null;
-  if (draftBackImg === null) draftBackImg = c.backImage || null;
+      if (draftFrontImg === null) draftFrontImg = c.frontImage || null;
+      if (draftBackImg === null) draftBackImg = c.backImage || null;
       editBox.innerHTML = `
         <div class="box" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1784,96 +2002,73 @@ let draftBackImg = null;
         </div>
       `;
       deckPanel.querySelector("#closeEdit").onclick = ()=>{
-  draftFrontImg = null;
-  draftBackImg = null;
-  editingCardId = null;
-  renderPanel();
-};
-   const frontPaste = deckPanel.querySelector("#frontPaste");
-const backPaste = deckPanel.querySelector("#backPaste");
+        draftFrontImg = null;
+        draftBackImg = null;
+        editingCardId = null;
+        renderPanel();
+      };
+      const frontPaste = deckPanel.querySelector("#frontPaste");
+      const backPaste = deckPanel.querySelector("#backPaste");
 
-frontPaste.onpaste = async (e)=>{
-  const b64 = await clipboardImageToBase64(e);
-  if (b64){
-    draftFrontImg = b64;
-    renderPanel();
-  }
-};
+      frontPaste.onpaste = async (e)=>{
+        const b64 = await clipboardImageToBase64(e);
+        if (b64){ draftFrontImg = b64; renderPanel(); }
+      };
+      backPaste.onpaste = async (e)=>{
+        const b64 = await clipboardImageToBase64(e);
+        if (b64){ draftBackImg = b64; renderPanel(); }
+      };
+      deckPanel.querySelector("#frontFile").onchange = async (e)=>{
+        const file = e.target.files?.[0];
+        if (file){ draftFrontImg = await fileToBase64(file); renderPanel(); }
+      };
+      deckPanel.querySelector("#backFile").onchange = async (e)=>{
+        const file = e.target.files?.[0];
+        if (file){ draftBackImg = await fileToBase64(file); renderPanel(); }
+      };
+      deckPanel.querySelector("#clearFrontImg").onclick = ()=>{ draftFrontImg = null; renderPanel(); };
+      deckPanel.querySelector("#clearBackImg").onclick  = ()=>{ draftBackImg = null; renderPanel(); };
 
-backPaste.onpaste = async (e)=>{
-  const b64 = await clipboardImageToBase64(e);
-  if (b64){
-    draftBackImg = b64;
-    renderPanel();
-  }
-};
+      deckPanel.querySelector("#saveCard").onclick = ()=>{
+        const nf = deckPanel.querySelector("#efront").value.trim();
+        const nb = deckPanel.querySelector("#eback").value.trim();
+        const pref = deckPanel.querySelector("#prefMode").value;
 
-deckPanel.querySelector("#frontFile").onchange = async (e)=>{
-  const file = e.target.files?.[0];
-  if (file){
-    draftFrontImg = await fileToBase64(file);
-    renderPanel();
-  }
-};
+        if (!nf && !draftFrontImg) { alert("Add front text or image."); return; }
+        if (!nb && !draftBackImg) { alert("Add back text or image."); return; }
 
-deckPanel.querySelector("#backFile").onchange = async (e)=>{
-  const file = e.target.files?.[0];
-  if (file){
-    draftBackImg = await fileToBase64(file);
-    renderPanel();
-  }
-};
-
-deckPanel.querySelector("#clearFrontImg").onclick = ()=>{
-  draftFrontImg = null;
-  renderPanel();
-};
-
-deckPanel.querySelector("#clearBackImg").onclick = ()=>{
-  draftBackImg = null;
-  renderPanel();
-};
-     deckPanel.querySelector("#saveCard").onclick = ()=>{
-  const nf = deckPanel.querySelector("#efront").value.trim();
-  const nb = deckPanel.querySelector("#eback").value.trim();
-  const pref = deckPanel.querySelector("#prefMode").value;
-
-  if (!nf && !draftFrontImg) { alert("Add front text or image."); return; }
-  if (!nb && !draftBackImg) { alert("Add back text or image."); return; }
-
-  updateData(d=>{
-    const deckRef = d.decks[selected];
-    if (isNew){
-      const idx = deckRef.cards.length;
-      const nc = makeCard({
-        id: String(Date.now()),
-        front: nf,
-        back: nb,
-        frontImage: draftFrontImg,
-        backImage: draftBackImg,
-        createdAtIdx: idx
-      });
-      nc.adaptivePref = pref;
-      deckRef.cards.push(nc);
-    }else{
-      const idx = deckRef.cards.findIndex(x=>x.id===c.id);
-      if (idx>=0){
-        deckRef.cards[idx] = {
-          ...deckRef.cards[idx],
-          front: nf,
-          back: nb,
-          frontImage: draftFrontImg,
-          backImage: draftBackImg,
-          adaptivePref: pref
-        };
-      }
-    }
-  });
-
-  draftFrontImg = null;
-  draftBackImg = null;
-  editingCardId = null;
-};
+        updateData(d=>{
+          const deckRef = d.decks[selected];
+          if (isNew){
+            const idx = deckRef.cards.length;
+            const nc = makeCard({
+              id: String(Date.now()),
+              front: nf,
+              back: nb,
+              frontImage: draftFrontImg,
+              backImage: draftBackImg,
+              createdAtIdx: idx
+            });
+            nc.adaptivePref = pref;
+            deckRef.cards.push(nc);
+          }else{
+            const idx = deckRef.cards.findIndex(x=>x.id===c.id);
+            if (idx>=0){
+              deckRef.cards[idx] = {
+                ...deckRef.cards[idx],
+                front: nf,
+                back: nb,
+                frontImage: draftFrontImg,
+                backImage: draftBackImg,
+                adaptivePref: pref
+              };
+            }
+          }
+        });
+        draftFrontImg = null;
+        draftBackImg = null;
+        editingCardId = null;
+      };
     }
   }
 
@@ -1969,14 +2164,13 @@ function studyHTML(){
 
         <div id="typedPane">
           <input class="ansInput" id="ansInput" placeholder="Type your answer…" autocomplete="off" spellcheck="false" />
-         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
-  <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btnOutline" id="revealBtn">Reveal / Flip</button>
-    <button class="btnPrimary" id="checkBtn">Check →</button>
-  </div>
-</div>
-
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
+            <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btnOutline" id="revealBtn">Reveal / Flip</button>
+              <button class="btnPrimary" id="checkBtn">Check →</button>
+            </div>
+          </div>
         </div>
 
         <div id="revealPane" class="reveal" style="display:none">
@@ -2147,12 +2341,12 @@ function bindStudy(){
 
   function getDeckCards(deckId){ return DATA.decks[deckId]?.cards || []; }
 
- function pickNextActive(){
-  const li = st.learning.findIndex(x => x.dueAfterTotal <= st.sess.total);
-  if (li >= 0){
-    st.active = { card: st.learning[li].card, source: "learning", learningIndex: li };
-    return st.active.card;
-  }
+  function pickNextActive(){
+    const li = st.learning.findIndex(x => x.dueAfterTotal <= st.sess.total);
+    if (li >= 0){
+      st.active = { card: st.learning[li].card, source: "learning", learningIndex: li };
+      return st.active.card;
+    }
 
     if (st.isRequeue){
       const c = st.requeue[st.reqIdx];
@@ -2415,135 +2609,133 @@ function bindStudy(){
     refresh();
   }
 
-function rateWithLabel(label, quality){
-  const card = currentCard();
-  if (!card) return;
+  function rateWithLabel(label, quality){
+    const card = currentCard();
+    if (!card) return;
 
-  if (label === "again"){
-    const current = DATA.decks[card.deckId]?.cards?.find(c => c.id === card.id) || card;
+    if (label === "again"){
+      const current = DATA.decks[card.deckId]?.cards?.find(c => c.id === card.id) || card;
 
-    const newCard = {
-      ...current,
-      seenCount: (current.seenCount || 0) + 1,
-      lastSeenOn: todayStr(),
-      wrongCount: (current.wrongCount || 0) + 1,
-      inWrongDeck: true,
-      mastered: false,
-      adaptiveMode: ((current.wrongCount || 0) + 1) >= (current.adaptiveThreshold ?? 3)
-        ? decideAdaptiveMode({ ...current, wrongCount: (current.wrongCount || 0) + 1 })
-        : "typed"
-    };
+      const newCard = {
+        ...current,
+        seenCount: (current.seenCount || 0) + 1,
+        lastSeenOn: todayStr(),
+        wrongCount: (current.wrongCount || 0) + 1,
+        inWrongDeck: true,
+        mastered: false,
+        adaptiveMode: ((current.wrongCount || 0) + 1) >= (current.adaptiveThreshold ?? 3)
+          ? decideAdaptiveMode({ ...current, wrongCount: (current.wrongCount || 0) + 1 })
+          : "typed"
+      };
 
-    const dk = DATA.decks[card.deckId];
-    const ci = dk?.cards?.findIndex(c => c.id === card.id);
-    if (ci >= 0) dk.cards[ci] = newCard;
+      const dk = DATA.decks[card.deckId];
+      const ci = dk?.cards?.findIndex(c => c.id === card.id);
+      if (ci >= 0) dk.cards[ci] = newCard;
 
-    const t = st.today;
-    if (!DATA.stats[t]) DATA.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
-    DATA.stats[t].reviewed += 1;
-    DATA.stats[t].wrong += 1;
+      const t = st.today;
+      if (!DATA.stats[t]) DATA.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
+      DATA.stats[t].reviewed += 1;
+      DATA.stats[t].wrong += 1;
 
-    saveData(DATA);
+      saveData(DATA);
+
+      st.sess.total += 1;
+      st.sess.wrong += 1;
+      st.sess.requeues += 1;
+
+      st.input = "";
+      st.result = null;
+      st.mc = null;
+      st.mcPicked = null;
+      st.phase = "question";
+      st.revealedBySpace = false;
+      st.active = {
+        card: { ...newCard, deckId: card.deckId },
+        source: st.active?.source || "primary",
+        learningIndex: -1
+      };
+      st.justAdvanced = true;
+
+      refresh();
+      return;
+    }
+
+    const ok = quality >= 3;
+    const newCard = sm2(card, quality);
+    newCard.seenCount = (card.seenCount || 0) + 1;
+    newCard.lastSeenOn = todayStr();
+
+    const wasWrong = (st.result === "wrong");
+    if (wasWrong || label === "hard"){
+      newCard.wrongCount = (card.wrongCount || 0) + 1;
+    } else if (quality >= 4){
+      newCard.wrongCount = 0;
+    } else {
+      newCard.wrongCount = card.wrongCount || 0;
+    }
+
+    if (card.mastered && label === "hard"){
+      newCard.mastered = false;
+      newCard.inWrongDeck = true;
+    } else if (label === "mastered"){
+      newCard.inWrongDeck = false;
+      newCard.mastered = true;
+    }
+
+    const threshold = newCard.adaptiveThreshold ?? 3;
+    newCard.adaptiveMode =
+      ((newCard.wrongCount || 0) >= threshold) ? decideAdaptiveMode(newCard) : "typed";
+
+    updateData(d => {
+      const dk = d.decks[card.deckId];
+      const ci = dk?.cards?.findIndex(c => c.id === card.id);
+      if (ci >= 0) dk.cards[ci] = newCard;
+
+      const t = st.today;
+      if (!d.stats[t]) d.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
+      d.stats[t].reviewed += 1;
+      if (ok) d.stats[t].correct += 1;
+      else d.stats[t].wrong += 1;
+    });
 
     st.sess.total += 1;
-    st.sess.wrong += 1;
-    st.sess.requeues += 1;
+    st.sess.correct += ok ? 1 : 0;
+    st.sess.wrong += ok ? 0 : 1;
 
-
-
-    st.input = "";
-    st.result = null;
-    st.mc = null;
-    st.mcPicked = null;
-    st.phase = "question";
-    st.revealedBySpace = false;
-    st.active = {
-      card: { ...newCard, deckId: card.deckId },
-      source: st.active?.source || "primary",
-      learningIndex: -1
-    };
-    st.justAdvanced = true;
-
-    refresh();
-    return;
-  }
-
-  const ok = quality >= 3;
-  const newCard = sm2(card, quality);
-  newCard.seenCount = (card.seenCount || 0) + 1;
-  newCard.lastSeenOn = todayStr();
-
-  const wasWrong = (st.result === "wrong");
-  if (wasWrong || label === "hard"){
-    newCard.wrongCount = (card.wrongCount || 0) + 1;
-  } else if (quality >= 4){
-    newCard.wrongCount = 0;
-  } else {
-    newCard.wrongCount = card.wrongCount || 0;
-  }
-
-  if (card.mastered && label === "hard"){
-    newCard.mastered = false;
-    newCard.inWrongDeck = true;
-  } else if (label === "mastered"){
-    newCard.inWrongDeck = false;
-    newCard.mastered = true;
-  }
-
-  const threshold = newCard.adaptiveThreshold ?? 3;
-  newCard.adaptiveMode =
-    ((newCard.wrongCount || 0) >= threshold) ? decideAdaptiveMode(newCard) : "typed";
-
-  updateData(d => {
-    const dk = d.decks[card.deckId];
-    const ci = dk?.cards?.findIndex(c => c.id === card.id);
-    if (ci >= 0) dk.cards[ci] = newCard;
-
-    const t = st.today;
-    if (!d.stats[t]) d.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
-    d.stats[t].reviewed += 1;
-    if (ok) d.stats[t].correct += 1;
-    else d.stats[t].wrong += 1;
-  });
-
-  st.sess.total += 1;
-  st.sess.correct += ok ? 1 : 0;
-  st.sess.wrong += ok ? 0 : 1;
-
-  if (st.isCustomMode){
-    if (label === "hard"){
-      st.sess.requeues += 1;
-      st.requeue.push({ ...newCard, deckId: card.deckId });
-    }
-  } else {
-    if (label === "hard" && !st.isRequeue){
-      st.learning.push({
-        card: { ...newCard, deckId: card.deckId },
-        dueAfterTotal: st.sess.total + 3
-      });
-    }
-
-    if (newCard.inWrongDeck && label !== "mastered"){
-      st.sess.requeues += 1;
-      if (st.isRequeue && st.reqIdx < st.requeue.length){
-        st.requeue.splice(st.reqIdx, 1);
-      } else {
-        st.requeue = st.requeue.filter(c => c.id !== newCard.id);
+    if (st.isCustomMode){
+      if (label === "hard"){
+        st.sess.requeues += 1;
+        st.requeue.push({ ...newCard, deckId: card.deckId });
       }
-      st.requeue.push({ ...newCard, deckId: card.deckId });
+    } else {
+      if (label === "hard" && !st.isRequeue){
+        st.learning.push({
+          card: { ...newCard, deckId: card.deckId },
+          dueAfterTotal: st.sess.total + 3
+        });
+      }
+
+      if (newCard.inWrongDeck && label !== "mastered"){
+        st.sess.requeues += 1;
+        if (st.isRequeue && st.reqIdx < st.requeue.length){
+          st.requeue.splice(st.reqIdx, 1);
+        } else {
+          st.requeue = st.requeue.filter(c => c.id !== newCard.id);
+        }
+        st.requeue.push({ ...newCard, deckId: card.deckId });
+      }
     }
-  }
 
-  if (st.active?.source === "learning" && st.active.learningIndex >= 0){
-    st.learning.splice(st.active.learningIndex, 1);
-  }
+    if (st.active?.source === "learning" && st.active.learningIndex >= 0){
+      st.learning.splice(st.active.learningIndex, 1);
+    }
 
-  if (st.isRequeue && (label === "good" || label === "easy" || label === "mastered")){
-    st.reqIdx++;
-  }
+    if (st.isRequeue && (label === "good" || label === "easy" || label === "mastered")){
+      st.reqIdx++;
+    }
 
-  advance();
-}
+    advance();
+  }
 
   checkBtn.onclick = doCheckTyped;
   if (revealBtn) revealBtn.onclick = revealAnswerNeutral;
@@ -2565,49 +2757,48 @@ function rateWithLabel(label, quality){
   });
 
   window.__studyKeyHandler = (e)=>{
-  if (SCREEN !== "study") return;
+    if (SCREEN !== "study") return;
 
-  const card = currentCard();
-  if (!card) return;
+    const card = currentCard();
+    if (!card) return;
 
-  const typingInAnswer =
-    document.activeElement === ansInput ||
-    e.target === ansInput ||
-    e.target?.tagName === "INPUT" ||
-    e.target?.tagName === "TEXTAREA" ||
-    e.target?.isContentEditable;
+    const typingInAnswer =
+      document.activeElement === ansInput ||
+      e.target === ansInput ||
+      e.target?.tagName === "INPUT" ||
+      e.target?.tagName === "TEXTAREA" ||
+      e.target?.isContentEditable;
 
-  // NEVER run global shortcuts while typing in the answer box
-  if (typingInAnswer) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      doCheckTyped();
+    if (typingInAnswer) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doCheckTyped();
+      }
+      return;
     }
-    return;
-  }
 
-  if (e.key.toLowerCase() === "s"){
-    e.preventDefault();
-    updateData(d=>{
-      const c = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
-      if (c) c.starred = !c.starred;
-    });
-    st.sess.starred += 1;
-    refresh();
-    return;
-  }
+    if (e.key.toLowerCase() === "s"){
+      e.preventDefault();
+      updateData(d=>{
+        const c = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
+        if (c) c.starred = !c.starred;
+      });
+      st.sess.starred += 1;
+      refresh();
+      return;
+    }
 
-  if (e.code === "Space"){
-    e.preventDefault();
-    if (st.phase === "question") revealAnswerNeutral();
-    return;
-  }
+    if (e.code === "Space"){
+      e.preventDefault();
+      if (st.phase === "question") revealAnswerNeutral();
+      return;
+    }
 
-  if (st.phase === "revealed"){
-    if (e.key === "1") { e.preventDefault(); rateWithLabel("again", 0); return; }
-    if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
-  }
-};
+    if (st.phase === "revealed"){
+      if (e.key === "1") { e.preventDefault(); rateWithLabel("again", 0); return; }
+      if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
+    }
+  };
 
   window.addEventListener("keydown", window.__studyKeyHandler);
 
@@ -2615,8 +2806,6 @@ function rateWithLabel(label, quality){
   window.__studyInterval = setInterval(()=>{ refresh(); }, 800);
   refresh();
 }
-
-
 
 /******************************************************************
  * IMPORT / EXPORT
@@ -2711,7 +2900,6 @@ function bindNav(){
 
   const masteredHandlingSel = document.getElementById("masteredHandlingSel");
   if (masteredHandlingSel){
-    // Set selected value after render
     masteredHandlingSel.value = DATA.settings?.masteredHandling || "mix";
     masteredHandlingSel.onchange = ()=> updateData(d=>{
       d.settings.masteredHandling = masteredHandlingSel.value;
