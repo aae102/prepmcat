@@ -1638,23 +1638,7 @@ let draftBackImg = null;
             <option value="random" ${deck.studyOrder==="random"?"selected":""}>Order: Random</option>
             <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
           </select>
-          <div id="bulkPanel" style="display:none"></div>
-```
-
----
-
-**Edit 3 — Add the logic** (Ctrl+F for):
-```
-deckPanel.querySelector("#newCardBtn").onclick
           <button class="btnSmall" id="newCardBtn">+ Card</button>
-          <button class="btnSmall" id="bulkAddBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.28)">⊕ Bulk Add</button>
-```
-
----
-
-**Edit 2 — Add the panel** (Ctrl+F for):
-```
-<div id="editBox"></div>
           <button class="btnSmall btnDanger" id="deleteDeckBtn">Delete Deck</button>
         </div>
       </div>
@@ -1710,131 +1694,6 @@ deckPanel.querySelector("#newCardBtn").onclick
   draftBackImg = null;
   editingCardId = "__new__";
   renderPanel();
-};
-    deckPanel.querySelector("#bulkAddBtn").onclick = ()=>{
-  const bp = deckPanel.querySelector("#bulkPanel");
-  if (bp.style.display !== "none"){ bp.style.display="none"; return; }
-  let bulkMode = "text";
-  let bulkCards = [];
-
-  function parseBulk(text){ return parseCardsFromTextSmart(text); }
-
-  function renderBulkPanel(){
-    const existingKeys = new Set((DATA.decks[selected]?.cards||[]).map(c=> c.front.trim()+"||"+c.back.trim()));
-    const rows = bulkCards.map((c,i)=>{
-      const isDup = existingKeys.has(c.front.trim()+"||"+c.back.trim());
-      return `<div class="bulkPreviewRow${isDup?' dup':''}">
-        <span class="bulkNum">${i+1}</span>
-        <span class="bulkPreviewF">${escapeHTML(c.front)}</span>
-        <span style="color:var(--muted2);flex-shrink:0">→</span>
-        <span class="bulkPreviewB">${escapeHTML(c.back)}</span>
-        ${isDup?`<span style="font-size:10px;color:var(--orange);background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.25);border-radius:4px;padding:1px 6px;font-weight:900;flex-shrink:0">dup</span>`:''}
-      </div>`;
-    }).join("");
-
-    const newCount = bulkCards.filter(c=>!existingKeys.has(c.front.trim()+"||"+c.back.trim())).length;
-
-    bp.innerHTML = `
-      <div style="background:var(--panel2);border:1px solid rgba(34,211,238,.30);border-radius:16px;padding:20px 18px;margin-bottom:14px;display:flex;flex-direction:column;gap:14px;animation:slideDown .18s ease">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <span style="font-size:13px;font-weight:900;color:var(--cyan);text-transform:uppercase;letter-spacing:.08em">⊕ Bulk Add Cards</span>
-          <button class="btnSmall" id="closeBulk">✕ Close</button>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btnSmall ${bulkMode==='text'?'':''}\" id="bModeText" style="${bulkMode==='text'?'color:var(--cyan);border-color:rgba(34,211,238,.35)':''}">✎ Paste Text</button>
-          <button class="btnSmall" id="bModeFile" style="${bulkMode==='file'?'color:var(--cyan);border-color:rgba(34,211,238,.35)':''}">↑ Upload File (PDF/Excel)</button>
-        </div>
-        <div id="bulkInputArea">
-          ${bulkMode==='text' ? `
-            <textarea class="textarea" id="bulkTextArea" rows="7"
-              placeholder="Paste any format:\n\nTerm - Definition\nQ: Question\nA: Answer\nFront\tBack\n..."></textarea>
-            <button class="btnSmall" id="bulkParseBtn" style="margin-top:8px;color:var(--purple);border-color:rgba(129,140,248,.3)">▶ Preview Cards</button>
-          ` : `
-            <div class="upload" id="bulkUploadZone" style="padding:18px">
-              <div style="font-size:22px;margin-bottom:6px">◉</div>
-              <div style="color:var(--muted);font-weight:900">Click to upload PDF or Excel (.xlsx/.csv)</div>
-            </div>
-            <input type="file" id="bulkFileInput" accept=".pdf,.xlsx,.xls,.csv" style="display:none"/>
-          `}
-        </div>
-        ${bulkCards.length ? `
-          <div>
-            <div style="font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">
-              Preview — ${bulkCards.length} cards parsed · <span style="color:var(--cyan)">${newCount} new</span> · <span style="color:var(--orange)">${bulkCards.length-newCount} duplicates</span>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:5px;max-height:240px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:8px 10px">
-              ${rows}
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btnSmall" id="bulkAddAllBtn" style="background:rgba(34,211,238,.10);border-color:rgba(34,211,238,.35);color:var(--cyan);font-weight:900;padding:8px 16px" ${newCount===0?'disabled':''}>
-              + Add ${newCount} New Card${newCount!==1?'s':''}
-            </button>
-            <button class="btnSmall" id="bulkAddInclDupBtn" style="color:var(--muted)" ${bulkCards.length===0?'disabled':''}>
-              Add All ${bulkCards.length} (incl. duplicates)
-            </button>
-            <span style="font-size:12px;color:var(--muted2)">Duplicates are detected by exact front+back match</span>
-          </div>
-        ` : ''}
-      </div>
-    `;
-    bp.style.display = "block";
-
-    bp.querySelector("#closeBulk").onclick = ()=>{ bp.style.display="none"; bulkCards=[]; };
-    bp.querySelector("#bModeText").onclick = ()=>{ bulkMode="text"; bulkCards=[]; renderBulkPanel(); };
-    bp.querySelector("#bModeFile").onclick = ()=>{ bulkMode="file"; bulkCards=[]; renderBulkPanel(); };
-
-    if (bulkMode==="text"){
-      const ta = bp.querySelector("#bulkTextArea");
-      bp.querySelector("#bulkParseBtn").onclick = ()=>{
-        const text = ta.value.trim();
-        if (!text){ alert("Paste some text first."); return; }
-        bulkCards = parseCardsFromTextSmart(text).map(c=>({front:c.front.slice(0,500),back:c.back.slice(0,500)}));
-        if (!bulkCards.length){ alert("Couldn't parse any cards. Try: Term - Definition or Tab-separated."); return; }
-        renderBulkPanel();
-      };
-    } else {
-      const zone = bp.querySelector("#bulkUploadZone");
-      const fi = bp.querySelector("#bulkFileInput");
-      if (zone) zone.onclick = ()=> fi.click();
-      if (fi) fi.onchange = async (e)=>{
-        const file = e.target.files?.[0]; if (!file) return;
-        zone.textContent = "Processing…";
-        try{
-          if (file.name.match(/\.pdf$/i)){
-            const lines = await extractLinesFromPDF(file);
-            bulkCards = parseCardsFromTextSmart(lines.join("\n")).map(c=>({front:c.front.slice(0,500),back:c.back.slice(0,500)}));
-          } else {
-            bulkCards = (await extractCardsFromSpreadsheet(file)).map(c=>({front:c.front.slice(0,500),back:c.back.slice(0,500)}));
-          }
-        }catch(err){ alert("Error reading file: "+err.message); }
-        renderBulkPanel();
-      };
-    }
-
-    function doCommit(inclDups){
-      const existingKeys2 = new Set((DATA.decks[selected]?.cards||[]).map(c=> c.front.trim()+"||"+c.back.trim()));
-      const toAdd = inclDups ? bulkCards : bulkCards.filter(c=>!existingKeys2.has(c.front.trim()+"||"+c.back.trim()));
-      if (!toAdd.length){ alert("No new cards to add."); return; }
-      updateData(d=>{
-        const dk = d.decks[selected];
-        const startIdx = dk.cards.length;
-        toAdd.forEach((c,i)=>{
-          dk.cards.push(makeCard({id:`${Date.now()}_bulk_${i}`, front:c.front, back:c.back, createdAtIdx:startIdx+i}));
-        });
-      });
-      bulkCards = [];
-      alert(`✓ Added ${toAdd.length} card${toAdd.length!==1?'s':''} to "${DATA.decks[selected]?.name}"`);
-      bp.style.display = "none";
-    }
-
-    const addAllBtn = bp.querySelector("#bulkAddAllBtn");
-    const addDupBtn = bp.querySelector("#bulkAddInclDupBtn");
-    if (addAllBtn) addAllBtn.onclick = ()=> doCommit(false);
-    if (addDupBtn) addDupBtn.onclick = ()=> doCommit(true);
-  }
-
-  renderBulkPanel();
 };
     deckPanel.querySelectorAll("[data-star]").forEach(btn=>{
       btn.onclick = ()=> updateData(d=>{
@@ -1940,10 +1799,7 @@ frontPaste.onpaste = async (e)=>{
     renderPanel();
   }
 };
-@keyframes slideDown{
-  from{opacity:0;transform:translateY(-8px)}
-  to{opacity:1;transform:translateY(0)}
-}
+
 backPaste.onpaste = async (e)=>{
   const b64 = await clipboardImageToBase64(e);
   if (b64){
