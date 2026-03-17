@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/txt.js/3.11.174/txt.min.js"></script>
   <script>
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    window.txtjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/txt.js/3.11.174/txt.worker.min.js";
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.3/xlsx.full.min.js"></script>
@@ -746,14 +746,15 @@ async function clipboardImageToBase64(e){
 }
 
 /******************************************************************
- * PDF + TEXT + SPREADSHEET EXTRACTION
+ * txt + TEXT + SPREADSHEET EXTRACTION
  ******************************************************************/
-async function extractLinesFromPDF(file){
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({data: arrayBuffer}).promise;
+async function extractLinesFromtxt(file){
+  const text = await file.text();
+  return text.split(/\n/).map(l=>l.trim()).filter(Boolean);
+
   const lines = [];
-  for (let p = 1; p <= pdf.numPages; p++){
-    const page = await pdf.getPage(p);
+  for (let p = 1; p <= txt.numPages; p++){
+    const page = await txt.getPage(p);
     const content = await page.getTextContent();
     const byY = {};
     for (const item of content.items){
@@ -1058,7 +1059,7 @@ function dashboardHTML(){
     subjects += `
       <div class="box" style="text-align:center;padding:48px 18px">
         <div style="font-size:44px;color:var(--border);margin-bottom:10px">◈</div>
-        <div style="color:var(--muted);margin-bottom:18px;font-weight:900">No decks yet. Upload a PDF/Excel to start.</div>
+        <div style="color:var(--muted);margin-bottom:18px;font-weight:900">No decks yet. Upload a txt/Excel to start.</div>
         <button class="btnPrimary" id="goAdd">+ Create First Deck</button>
       </div>
     `;
@@ -1421,7 +1422,7 @@ function addHTML(){
         Extract & Create Deck
       </button>
       <div class="note" style="margin-top:10px">
-        Tips: PDFs with 2 columns should work. You can add images later in Manage.
+        Tips: txts with 2 columns should work. You can add images later in Manage.
       </div>
     </div>
   `;
@@ -1429,11 +1430,11 @@ function addHTML(){
 
 function bindAdd(){
   document.getElementById("backDash").onclick = ()=> setScreen("dashboard");
-  let mode = "pdf";
+  let mode = "txt";
   let files = [];
   let textContent = "";
   let busy = false;
-  let pdfLineByLine = false;
+  let txtLineByLine = false;
   const modeButtons = [...document.querySelectorAll("[data-mode]")];
   const modeArea = document.getElementById("modeArea");
   const msgArea = document.getElementById("msgArea");
@@ -1445,7 +1446,7 @@ function bindAdd(){
     modeButtons.forEach(b=>b.classList.toggle("active", b.dataset.mode===m));
     files = [];
     textContent = "";
-    pdfLineByLine = false;
+    txtLineByLine = false;
     msgArea.innerHTML = "";
     renderModeArea();
     buildBtn.textContent = (mode==="manual") ? "Create Empty Deck" : "Extract & Create Deck";
@@ -1457,15 +1458,15 @@ function bindAdd(){
   }
 
   function renderModeArea(){
-    if (mode==="pdf"){
+    if (mode==="txt"){
       modeArea.innerHTML = `
         <div style="margin-bottom:16px">
-          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">PDF Files</div>
+          <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">txt Files</div>
           <div class="upload" id="uploadZone">
             <div style="font-size:30px;margin-bottom:8px">◉</div>
-            <div style="color:var(--muted);font-weight:900">Click to upload PDF(s)</div>
+            <div style="color:var(--muted);font-weight:900">Click to upload txt(s)</div>
           </div>
-          <input type="file" id="fileInput" accept=".pdf" multiple style="display:none" />
+          <input type="file" id="fileInput" accept=".txt" multiple style="display:none" />
           <label style="display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--muted);font-size:12px;font-weight:900">
             <input type="checkbox" id="lineByLine" />
             Line-by-line mode (pairs adjacent lines into cards)
@@ -1476,9 +1477,9 @@ function bindAdd(){
       document.getElementById("uploadZone").onclick = ()=> input.click();
       input.onchange = (e)=>{
         files = [...e.target.files];
-        pushMsg("ok", `Loaded ${files.length} PDF(s): ${files.map(f=>f.name).join(", ")}`);
+        pushMsg("ok", `Loaded ${files.length} txt(s): ${files.map(f=>f.name).join(", ")}`);
       };
-      document.getElementById("lineByLine").onchange = (e)=>{ pdfLineByLine = !!e.target.checked; };
+      document.getElementById("lineByLine").onchange = (e)=>{ txtLineByLine = !!e.target.checked; };
     }
     if (mode==="excel"){
       modeArea.innerHTML = `
@@ -1521,12 +1522,12 @@ function bindAdd(){
     buildBtn.textContent = "Processing…";
     try{
       let rawCards = [];
-      if (mode==="pdf"){
-        if (!files.length) throw new Error("Upload at least one PDF");
+      if (mode==="txt"){
+        if (!files.length) throw new Error("Upload at least one txt");
         for (const f of files){
           pushMsg("ok", `Extracting: ${f.name}`);
-          const lines = await extractLinesFromPDF(f);
-          rawCards = rawCards.concat(pdfLineByLine ? cardsFromLinesLineByLine(lines) : parseCardsFromTextSmart(lines.join("\n")));
+          const lines = await extractLinesFromtxt(f);
+          rawCards = rawCards.concat(txtLineByLine ? cardsFromLinesLineByLine(lines) : parseCardsFromTextSmart(lines.join("\n")));
         }
       }
       if (mode==="excel"){
@@ -1666,7 +1667,7 @@ function bindManage(){
         <!-- Mode tabs -->
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btnSmall" id="bulkTabText" style="${bulkMode==='text'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">✎ Paste Text</button>
-          <button class="btnSmall" id="bulkTabFile" style="${bulkMode==='file'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">↑ Upload File (PDF / Excel / CSV)</button>
+          <button class="btnSmall" id="bulkTabFile" style="${bulkMode==='file'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">↑ Upload File (txt / Excel / CSV)</button>
         </div>
 
         <!-- Input area -->
@@ -1683,9 +1684,9 @@ function bindManage(){
           <div>
             <div class="upload" id="bulkUploadZone" style="padding:18px 14px">
               <div style="font-size:22px;margin-bottom:6px">◉</div>
-              <div style="color:var(--muted);font-weight:900">Click to upload PDF, .xlsx, or .csv</div>
+              <div style="color:var(--muted);font-weight:900">Click to upload txt, .xlsx, or .csv</div>
             </div>
-            <input type="file" id="bulkFileInput" accept=".pdf,.xlsx,.xls,.csv" style="display:none"/>
+            <input type="file" id="bulkFileInput" accept=".txt,.xlsx,.xls,.csv" style="display:none"/>
           </div>
         `}
 
@@ -1750,8 +1751,8 @@ function bindManage(){
         if (zone) zone.innerHTML = `<div style="color:var(--muted);font-weight:900">Processing "${escapeHTML(file.name)}"…</div>`;
         try{
           let parsed = [];
-          if (file.name.match(/\.pdf$/i)){
-            const lines = await extractLinesFromPDF(file);
+          if (file.name.match(/\.txt$/i)){
+            const lines = await extractLinesFromtxt(file);
             parsed = parseCardsFromTextSmart(lines.join("\n"));
           } else {
             parsed = await extractCardsFromSpreadsheet(file);
