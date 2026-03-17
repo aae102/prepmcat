@@ -2187,30 +2187,52 @@ function studyHTML(){
           <div class="hint" style="text-align:center">Again/Hard repeat soon · wrong-deck requeue until Mastered</div>
         </div>
 
-        <!-- edit panel -->
-        <div id="editPanel" style="display:none;flex-direction:column;gap:12px;background:var(--panel);border:1px solid rgba(129,140,248,.35);border-radius:16px;padding:20px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:13px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:.08em">✎ Edit Card</span>
-            <button class="btnSmall" id="cancelEditBtn">✕ Close</button>
-          </div>
-          <textarea class="textarea" id="studyEditFront" rows="2" placeholder="Front"></textarea>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
-              + Front Image <input type="file" id="editFrontFile" accept="image/*" style="display:none"/>
-            </label>
-            <span id="editFrontImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
-            <button class="btnSmall btnDanger" id="clearEditFrontImg">Clear</button>
-          </div>
-          <textarea class="textarea" id="studyEditBack" rows="2" placeholder="Back"></textarea>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
-              + Back Image <input type="file" id="editBackFile" accept="image/*" style="display:none"/>
-            </label>
-            <span id="editBackImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
-            <button class="btnSmall btnDanger" id="clearEditBackImg">Clear</button>
-          </div>
-          <button class="btnPrimary" id="saveEditBtn">Save Changes</button>
-        </div>
+ <!-- edit panel -->
+<div id="editPanel" style="display:none;flex-direction:column;gap:12px;background:var(--panel);border:1px solid rgba(129,140,248,.35);border-radius:16px;padding:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:13px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:.08em">✎ Edit Card</span>
+    <button class="btnSmall" id="cancelEditBtn">✕ Close</button>
+  </div>
+  <textarea class="textarea" id="studyEditFront" rows="2" placeholder="Front"></textarea>
+  
+  <!-- FRONT IMAGE SECTION WITH PASTE BUTTON -->
+  <div class="box" style="background:var(--panel2);padding:12px">
+    <div style="font-weight:900;margin-bottom:8px;font-size:12px">Front Image</div>
+    <div style="display:flex;gap:8px;flex-direction:column">
+      <button class="btnSmall" id="studyPasteFrontBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25);background:rgba(34,211,238,.08);width:100%;padding:8px">
+        📋 Paste Image from Clipboard (Front)
+      </button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
+          + Upload File <input type="file" id="editFrontFile" accept="image/*" style="display:none"/>
+        </label>
+        <span id="editFrontImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
+        <button class="btnSmall btnDanger" id="clearEditFrontImg">Clear</button>
+      </div>
+    </div>
+  </div>
+  
+  <textarea class="textarea" id="studyEditBack" rows="2" placeholder="Back"></textarea>
+  
+  <!-- BACK IMAGE SECTION WITH PASTE BUTTON -->
+  <div class="box" style="background:var(--panel2);padding:12px">
+    <div style="font-weight:900;margin-bottom:8px;font-size:12px">Back Image</div>
+    <div style="display:flex;gap:8px;flex-direction:column">
+      <button class="btnSmall" id="studyPasteBackBtn" style="color:var(--cyan);border-color:rgba(34,211,238,.25);background:rgba(34,211,238,.08);width:100%;padding:8px">
+        📋 Paste Image from Clipboard (Back)
+      </button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="btnSmall" style="cursor:pointer;color:var(--cyan);border-color:rgba(34,211,238,.25)">
+          + Upload File <input type="file" id="editBackFile" accept="image/*" style="display:none"/>
+        </label>
+        <span id="editBackImgStatus" style="font-size:11px;color:var(--muted2)">no image</span>
+        <button class="btnSmall btnDanger" id="clearEditBackImg">Clear</button>
+      </div>
+    </div>
+  </div>
+  
+  <button class="btnPrimary" id="saveEditBtn">Save Changes</button>
+</div>
 
       </div>
 
@@ -2284,7 +2306,64 @@ function bindStudy(){
   const editBackImgStatus = document.getElementById("editBackImgStatus");
   const clearEditFrontImg = document.getElementById("clearEditFrontImg");
   const clearEditBackImg = document.getElementById("clearEditBackImg");
+// Add paste button handlers for study screen
+const studyPasteFrontBtn = document.getElementById("studyPasteFrontBtn");
+if (studyPasteFrontBtn) {
+  studyPasteFrontBtn.onclick = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      let found = false;
+      
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            draftEditFrontImg = await fileToBase64(blob);
+            found = true;
+            updateImgStatus();
+            return;
+          }
+        }
+      }
+      
+      if (!found) {
+        alert("No image found in clipboard. Copy an image first (Ctrl+C).");
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard:', err);
+      alert("Could not access clipboard. Make sure you've copied an image and granted permission.");
+    }
+  };
+}
 
+const studyPasteBackBtn = document.getElementById("studyPasteBackBtn");
+if (studyPasteBackBtn) {
+  studyPasteBackBtn.onclick = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      let found = false;
+      
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            draftEditBackImg = await fileToBase64(blob);
+            found = true;
+            updateImgStatus();
+            return;
+          }
+        }
+      }
+      
+      if (!found) {
+        alert("No image found in clipboard. Copy an image first (Ctrl+C).");
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard:', err);
+      alert("Could not access clipboard. Make sure you've copied an image and granted permission.");
+    }
+  };
+}
   let draftEditFrontImg = null;
   let draftEditBackImg = null;
 
