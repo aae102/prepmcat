@@ -395,6 +395,11 @@ function isDue(card){
 function isMasteredDue(card){
   return card.mastered && (!card.nextReview || localDateStr(card.nextReview) <= todayStr());
 }
+function getStudySessionSignature(){
+  const mode = DATA.settings?.studyMode || "mixed_random";
+  const muted = (getMutedToday() || []).slice().sort().join("|");
+  return `${todayStr()}__${mode}__${muted}`;
+}
 
 /******************************************************************
  * SM-2
@@ -1094,14 +1099,19 @@ function bindDashboard(){
   if (b) b.onclick = ()=> setScreen("add");
   const resetBtn = document.getElementById("resetTodayStats");
   if (resetBtn) resetBtn.onclick = ()=> updateData(d=>{ d.stats[todayStr()] = {reviewed:0,correct:0,wrong:0}; });
-  const unmuteBtn = document.getElementById("unmuteAllDecks");
-  if (unmuteBtn) unmuteBtn.onclick = ()=> updateData(d=>{
+const unmuteBtn = document.getElementById("unmuteAllDecks");
+if (unmuteBtn) unmuteBtn.onclick = ()=> {
+  window.__study = null;
+  updateData(d=>{
     const t = todayStr();
     if (!d.settings.mutedDecksByDay) d.settings.mutedDecksByDay = {};
     d.settings.mutedDecksByDay[t] = [];
   });
-  document.querySelectorAll("[data-mute-deck]").forEach(btn=>{
-    btn.onclick = ()=> updateData(d=>{
+};
+ document.querySelectorAll("[data-mute-deck]").forEach(btn=>{
+  btn.onclick = ()=> {
+    window.__study = null;
+    updateData(d=>{
       const deckId = btn.dataset.muteDeck;
       const t = todayStr();
       if (!d.settings.mutedDecksByDay) d.settings.mutedDecksByDay = {};
@@ -1110,7 +1120,8 @@ function bindDashboard(){
         ? list.filter(x=>x!==deckId)
         : [...list, deckId];
     });
-  });
+  };
+});
 }
 
 /******************************************************************
@@ -1402,12 +1413,13 @@ function addHTML(){
         <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Deck / Subject Name</div>
         <input class="input" id="deckName" placeholder="e.g. Biochemistry, Biology, Physics" />
       </div>
-      <div style="margin-bottom:16px">
-        <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Import Method</div>
-        <div class="modeRow">
-          <button class="modeBtn" data-mode="text">✎ Paste Text</button>
-        </div>
-      </div>
+     <div style="margin-bottom:16px">
+  <div class="tiny" style="font-weight:900;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;color:var(--muted)">Import Method</div>
+  <div class="modeRow">
+    <button class="modeBtn" data-mode="txt">↑ Upload txt</button>
+    <button class="modeBtn" data-mode="text">✎ Paste Text</button>
+  </div>
+</div>
       <div class="box" style="margin-bottom:14px">
         <div class="tiny" style="font-weight:900;color:var(--muted);margin-bottom:8px">Deck study order</div>
         <select id="deckOrder" class="input">
@@ -1665,9 +1677,14 @@ function bindManage(){
         </div>
 
         <!-- Mode tabs -->
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btnSmall" id="bulkTabText" style="${bulkMode==='text'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">✎ Paste Text</button>
-          <button class="btnSmall" id="bulkTabFile" style="${bulkMode==='file'?'color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)':''}">↑ Upload File (txt / Excel / CSV)</button>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button class="modeBtn ${bulkMode==='text'?'active':''}" id="bulkTabText" style="max-width:180px">
+    ✎ Paste Text
+  </button>
+  <button class="modeBtn ${bulkMode==='file'?'active':''}" id="bulkTabFile" style="max-width:180px">
+    ↑ Upload txt
+  </button>
+</div> Excel / CSV)</button>
         </div>
 
         <!-- Input area -->
@@ -2108,12 +2125,21 @@ function studyHTML(){
     `;
   }
 
-  const existingStudy = window.__study;
-  const shouldPreserve = existingStudy && existingStudy.dayKey === today && !!(existingStudy.isCustomMode) === !!(isCustomMode) && !existingStudy.freshReset;
-  if (!shouldPreserve) {
-    window.__study = {
+const existingStudy = window.__study;
+const currentSignature = getStudySessionSignature();
+
+const shouldPreserve =
+  existingStudy &&
+  existingStudy.dayKey === today &&
+  existingStudy.sessionSignature === currentSignature &&
+  !!(existingStudy.isCustomMode) === !!(isCustomMode) &&
+  !existingStudy.freshReset;
+
+if (!shouldPreserve) {
+  window.__study = {
       today,
       dayKey: today,
+      sessionSignature: currentSignature,
       primaryQueue,
       requeue: [],
       learning: [],
@@ -2406,22 +2432,68 @@ if (studyPasteBackBtn) {
   if (clearEditFrontImg) clearEditFrontImg.onclick = ()=>{ draftEditFrontImg=null; updateImgStatus(); };
   if (clearEditBackImg) clearEditBackImg.onclick = ()=>{ draftEditBackImg=null; updateImgStatus(); };
 
-  if (saveEditBtn) saveEditBtn.onclick = ()=>{
-    const card = currentCard(); if (!card) return;
-    const nf = studyEditFront.value.trim();
-    const nb = studyEditBack.value.trim();
-    if (!nf||!nb){ alert("Front and back required."); return; }
-    const dk = DATA.decks[card.deckId];
-    const ci = dk?.cards?.findIndex(c=>c.id===card.id);
-    if (ci>=0) dk.cards[ci] = {...dk.cards[ci], front:nf, back:nb, frontImage:draftEditFrontImg, backImage:draftEditBackImg};
-    if (st.active?.card){ st.active.card.front=nf; st.active.card.back=nb; st.active.card.frontImage=draftEditFrontImg; st.active.card.backImage=draftEditBackImg; }
-    const pqi = st.primaryQueue.findIndex(c=>c.id===card.id);
-    if (pqi>=0) st.primaryQueue[pqi] = {...st.primaryQueue[pqi], front:nf, back:nb, frontImage:draftEditFrontImg, backImage:draftEditBackImg};
-    saveData(DATA);
-    editPanel.style.display="none";
-    refresh();
-  };
+if (saveEditBtn) saveEditBtn.onclick = ()=>{
+  const card = currentCard();
+  if (!card) return;
 
+  const nf = studyEditFront.value.trim();
+  const nb = studyEditBack.value.trim();
+
+  if (!nf || !nb){
+    alert("Front and back required.");
+    return;
+  }
+
+  updateData(d => {
+    const dk = d.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(c => c.id === card.id);
+    if (ci >= 0){
+      dk.cards[ci] = {
+        ...dk.cards[ci],
+        front: nf,
+        back: nb,
+        frontImage: draftEditFrontImg,
+        backImage: draftEditBackImg
+      };
+    }
+  });
+
+  if (st.active?.card){
+    st.active.card = {
+      ...st.active.card,
+      front: nf,
+      back: nb,
+      frontImage: draftEditFrontImg,
+      backImage: draftEditBackImg
+    };
+  }
+
+  const pqi = st.primaryQueue.findIndex(c => c.id === card.id);
+  if (pqi >= 0){
+    st.primaryQueue[pqi] = {
+      ...st.primaryQueue[pqi],
+      front: nf,
+      back: nb,
+      frontImage: draftEditFrontImg,
+      backImage: draftEditBackImg
+    };
+  }
+
+  st.requeue = st.requeue.map(c =>
+    c.id === card.id
+      ? {...c, front: nf, back: nb, frontImage: draftEditFrontImg, backImage: draftEditBackImg}
+      : c
+  );
+
+  st.learning = st.learning.map(x =>
+    x.card?.id === card.id
+      ? {...x, card: {...x.card, front: nf, back: nb, frontImage: draftEditFrontImg, backImage: draftEditBackImg}}
+      : x
+  );
+
+  editPanel.style.display = "none";
+  refresh();
+};
   function getDeckCards(deckId){ return DATA.decks[deckId]?.cards || []; }
 
   function pickNextActive(){
@@ -2997,9 +3069,13 @@ function bindNav(){
   const importFile = document.getElementById("importFile");
   if (importFile) importFile.onchange = (e)=>{ importData(e.target.files?.[0]); e.target.value=""; };
 
-  const modeSel = document.getElementById("studyModeSel");
-  if (modeSel) modeSel.onchange = ()=> updateData(d=>{ d.settings.studyMode = modeSel.value; });
-
+const modeSel = document.getElementById("studyModeSel");
+if (modeSel) modeSel.onchange = ()=>{
+  window.__study = null;
+  updateData(d=>{
+    d.settings.studyMode = modeSel.value;
+  });
+};
   const strictSel = document.getElementById("strictSel");
   if (strictSel) strictSel.onchange = ()=> updateData(d=>{ d.settings.strictness = strictSel.value; });
 
