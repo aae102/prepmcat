@@ -131,6 +131,18 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .option.wrong{border-color:var(--wrong);background:#270f0f;}
 .option.wrong .opt-letter{background:var(--wrong);color:#fff;}
 .option.locked{cursor:default;}
+.btn-dont-know{padding:8px 18px;border-radius:8px;border:2px dashed var(--wrong);background:rgba(239,68,68,.08);color:var(--wrong);font-size:.85rem;font-weight:800;font-family:'Syne',sans-serif;cursor:pointer;transition:background .15s;}
+.btn-dont-know:hover{background:rgba(239,68,68,.2);}
+.mode-toggle{display:flex;gap:6px;margin-bottom:20px;justify-content:center;}
+.mode-btn{padding:7px 26px;border-radius:20px;border:1.5px solid var(--border);background:var(--card2);color:var(--dim);font-size:.82rem;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:.15s;}
+.mode-btn.active{border-color:var(--accent);background:var(--accent);color:#fff;}
+.mode-btn.ms-active{border-color:#a78bfa;background:#a78bfa;color:#fff;}
+.ms-section-head{font-size:.7rem;font-weight:800;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin:20px 0 8px;padding-left:2px;}
+.ms-add-card{border:1.5px dashed var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--dim);font-size:.85rem;font-weight:700;border-radius:14px;padding:20px;transition:.15s;}
+.ms-add-card:hover{border-color:#a78bfa;color:#a78bfa;}
+.subject-card.ms-subject{border-color:#a78bfa22;}
+.subject-card.ms-subject:hover{border-color:#a78bfa;background:#1a1535;}
+.subject-card.ms-subject .subj-count{color:#a78bfa;}
 /* Explanation */
 .explanation{display:none;margin-top:18px;padding:15px 18px;background:#0c1d31;
   border-left:3px solid var(--accent2);border-radius:10px;
@@ -241,11 +253,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <div class="nav-logo">HY<span>Forge</span></div>
   <div class="tab-row" style="flex-wrap:wrap;gap:4px;">
     <button class="tab-btn active" onclick="switchSubject('home')" id="tab-home">Home</button>
+    <span id="mcat-tabs">
     <button class="tab-btn" onclick="switchSubject('bio')" id="tab-bio">Bio</button>
     <button class="tab-btn" onclick="switchSubject('biochem')" id="tab-biochem">Biochem</button>
     <button class="tab-btn" onclick="switchSubject('ps')" id="tab-ps">Psych/Soc</button>
     <button class="tab-btn" onclick="switchSubject('gc')" id="tab-gc" style="border-color:#f59e0b30">⚗️ Gen Chem</button>
     <button class="tab-btn" onclick="switchSubject('ph')" id="tab-ph" style="border-color:#67e8f930">⚡ Gen Phys</button>
+    </span>
+    <button class="tab-btn" id="tab-ms-active" style="display:none;border-color:#a78bfa30"></button>
     <button class="tab-btn" onclick="switchSubject('tracker')" id="tab-tracker">Tracker</button>
   </div>
   <div class="score-pill" id="score-pill" style="display:none">
@@ -273,7 +288,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <button class="quick-btn" onclick="exportDeckJSON('subject')">Export Course</button>
     <button class="quick-btn" onclick="exportDeckTXT('selection')">Copy Selection TXT</button>
     <button class="quick-btn" onclick="document.getElementById('import-deck-json').click()">Import Deck JSON</button>
-    <button class="quick-btn" onclick="openPasteDeckModal()">Quick Import</button>
+    <button class="quick-btn" onclick="openPasteDeckModal()">Import</button>
     <button class="quick-btn" onclick="openCardEditorForNew()">Forge Card</button>
   </div>
   <div class="toolbar-group">
@@ -882,6 +897,23 @@ QGenChem.forEach(upgradeGenChemQuestion);
 QPhysics.forEach(upgradePhysicsQuestion);
 
 
+const DEFAULT_MS_BLOCKS = [
+  {key:'ms-foundations', label:'Foundations', icon:'🔬', desc:'Basic science foundations — cell biology, genetics, and biochemistry.'},
+  {key:'ms-molcells', label:'Molecules & Cells', icon:'🧬', desc:'Molecular biology, cell signaling, and membrane physiology.'},
+  {key:'ms-anatomy', label:'Anatomy', icon:'🦴', desc:'Human structure — gross anatomy, histology, and embryology.'},
+  {key:'ms-patho', label:'Principles of Disease', icon:'🦠', desc:'Pathophysiology — inflammation, neoplasia, and genetics of disease.'},
+  {key:'ms-cardio', label:'Cardiovascular', icon:'❤️', desc:'Heart and vessels — physiology, pathology, pharmacology.'},
+  {key:'ms-resp', label:'Respiratory', icon:'🫁', desc:'Pulmonary — mechanics, gas exchange, obstructive/restrictive disease.'},
+  {key:'ms-renal', label:'Renal / Urinary', icon:'🫘', desc:'Kidney physiology, acid-base, fluids, electrolytes, nephropathology.'},
+  {key:'ms-gi', label:'GI', icon:'🍽️', desc:'GI tract — secretion, motility, liver, pancreas, and pathology.'},
+  {key:'ms-endo', label:'Endocrine', icon:'⚡', desc:'Hormones, diabetes, thyroid, adrenal, and reproductive endocrinology.'},
+  {key:'ms-neuro', label:'Nervous System', icon:'🧠', desc:'Neuroanatomy, neuropathology, and neuropharmacology.'},
+  {key:'ms-psych', label:'Psychiatry', icon:'💭', desc:'DSM disorders, psychopharmacology, and behavioral science.'},
+  {key:'ms-msk', label:'Musculoskeletal', icon:'🦵', desc:'Bone, joint, muscle — orthopedics, rheumatology, connective tissue.'},
+  {key:'ms-heme', label:'Hematology', icon:'🩸', desc:'Blood cells, coagulation, anemias, leukemias, and lymphomas.'},
+  {key:'ms-repro', label:'Reproductive', icon:'🌸', desc:'Reproductive physiology, OB/GYN, genetics, and embryology.'},
+];
+
 let state = {
   view: 'home',
   subject: null,
@@ -905,6 +937,9 @@ let state = {
   sessionWrongUIDs: [],   // tracks wrong answers in current session
   recallMode: false,      // hides MC options until revealed
   optionsRevealed: false, // per-question reveal state
+  dontKnowPressed: false, // pressed DON'T KNOW in recall mode before seeing options
+  appMode: 'mcat',        // 'mcat' or 'ms'
+  msBlocks: null,         // initialized from DEFAULT_MS_BLOCKS on first load
   customCards: {bio: [], biochem: [], ps: [], gc: [], ph: []},
   cardEdits: {},
   editorDraft: null,
@@ -1275,13 +1310,16 @@ function ensureSubjectMeta() {
     if (typeof state.subjectMeta[key].active !== 'boolean') state.subjectMeta[key].active = true;
   });
 }
+function getMsBlock(key) { return (state.msBlocks || DEFAULT_MS_BLOCKS).find(b => b.key === key) || null; }
 function getSubjectLabel(subj, full=false) {
+  if (subj && subj.startsWith('ms-')) { const b = getMsBlock(subj); return b ? b.label : subj; }
   ensureSubjectMeta();
   const meta = state.subjectMeta[subj] || defaultSubjectMeta()[subj];
   if (!meta) return '';
   return full ? (meta.full || meta.label || '') : (meta.label || meta.full || '');
 }
 function getSubjectIcon(subj) {
+  if (subj && subj.startsWith('ms-')) { const b = getMsBlock(subj); return b ? b.icon : '📚'; }
   ensureSubjectMeta();
   const meta = state.subjectMeta[subj] || defaultSubjectMeta()[subj];
   return meta && meta.icon ? meta.icon : '';
@@ -1295,6 +1333,7 @@ function currentSubjectLabel() { return getSubjectLabel(state.subject, true) || 
 function getQuestionUID(q) { return q.uid || (state.subject + '-' + (q.num || q.tag || Math.random())); }
 function getQuestionSubject(q) {
   if (!q) return state.subject || 'bio';
+  if (q.subject && q.subject.startsWith('ms-')) return q.subject;
   if (q.subject && ['bio','biochem','ps','gc','ph'].includes(q.subject)) return q.subject;
   if (q.deckLabel === 'Bio') return 'bio';
   if (q.deckLabel === 'Biochem') return 'biochem';
@@ -1362,6 +1401,8 @@ function serializeState() {
     cardEdits: state.cardEdits,
     subjectMeta: state.subjectMeta,
     selectedSetNames: state.selectedSetNames,
+    appMode: state.appMode,
+    msBlocks: state.msBlocks,
   };
 }
 function restoreSession() {
@@ -1413,12 +1454,18 @@ function applySaved(obj) {
     state.wrongDeck.bio = uniq([...(state.wrongDeck.bio || []), ...obj.wrongDeck.biobio]);
     state.wrongDeck.biochem = uniq([...(state.wrongDeck.biochem || []), ...obj.wrongDeck.biobio]);
   }
+  state.appMode = obj.appMode || 'mcat';
+  state.msBlocks = Array.isArray(obj.msBlocks) && obj.msBlocks.length ? obj.msBlocks : DEFAULT_MS_BLOCKS.map(b => ({...b}));
   ['bio','biochem','ps','gc','ph'].forEach(k => {
     state.mastery[k] = uniq(state.mastery[k] || []);
     state.wrongDeck[k] = uniq(state.wrongDeck[k] || []);
     state.touchedBySubject[k] = uniq(state.touchedBySubject[k] || []);
     state.customCards[k] = Array.isArray(state.customCards[k]) ? state.customCards[k] : [];
     state.selectedSetNames[k] = Array.isArray(state.selectedSetNames[k]) ? state.selectedSetNames[k] : [];
+  });
+  state.msBlocks.forEach(b => {
+    if (!state.customCards[b.key]) state.customCards[b.key] = [];
+    if (!state.selectedSetNames[b.key]) state.selectedSetNames[b.key] = [];
   });
   applyDynamicCards();
   restoreSession();
@@ -1811,7 +1858,8 @@ function renderModal() {
       <div class="setup-header"><h2>${state.editorMode === 'edit' ? 'Edit Card' : 'Forge Card'}</h2><p>Edit the card right here. Images save in browser progress too.</p></div>
       <div class="editor-grid">
         <div>
-          <div class="editor-field"><label>Subject</label><select onchange="updateEditorField('subject', this.value)">${['bio','biochem','ps','gc','ph'].map(s => `<option value="${s}" ${d.subject===s?'selected':''}>${({bio:'Biology',biochem:'Biochemistry',ps:'Psych / Soc',gc:'General Chemistry',ph:'General Physics'})[s]}</option>`).join('')}</select></div>
+          <div class="editor-field"><label>Subject</label><select onchange="updateEditorField('subject', this.value)">${[...['bio','biochem','ps','gc','ph'], ...(state.msBlocks||DEFAULT_MS_BLOCKS).map(b=>b.key)].map(s => { const label = s.startsWith('ms-') ? getSubjectLabel(s) : ({bio:'Biology',biochem:'Biochemistry',ps:'Psych / Soc',gc:'General Chemistry',ph:'General Physics'})[s]; return `<option value="${s}" ${d.subject===s?'selected':''}>${label}</option>`; }).join('')}</select>
+</div>
           <div class="editor-field"><label>Course</label><input list="set-name-list" value="${escapeHtml(d.setName || 'Quick Forge')}" oninput="updateEditorField('setName', this.value)"><datalist id="set-name-list">${getCustomSetNames(d.subject || state.subject || 'bio').map(name => `<option value=\"${escapeHtml(name)}\"></option>`).join('')}</datalist></div>
           <div class="editor-field"><label>Tag</label><input value="${escapeHtml(d.tag || '')}" oninput="updateEditorField('tag', this.value)"></div>
           <div class="editor-field"><label>Question</label><textarea oninput="updateEditorField('q', this.value)">${escapeHtml(d.q || '')}</textarea></div>
@@ -1837,13 +1885,13 @@ function renderModal() {
     const names = getCustomSetNames(subject);
     root.innerHTML = `<div class="editor-modal"><div class="editor-panel">
       <div class="setup-header"><h2>Manage Courses</h2><p>Create, rename, or delete custom sets for ${({bio:'Biology',biochem:'Biochemistry',ps:'Psych / Soc',gc:'General Chemistry',ph:'General Physics'})[subject]}.</p></div>
-      <div class="quick-row" style="margin-bottom:14px;"><button class="quick-btn" onclick="openCardEditorForNew('${subject}')">Forge Card</button><button class="quick-btn" onclick="openPasteDeckModal()">Quick Import</button></div>
+      <div class="quick-row" style="margin-bottom:14px;"><button class="quick-btn" onclick="openCardEditorForNew('${subject}')">Forge Card</button><button class="quick-btn" onclick="openPasteDeckModal()">Import</button></div>
       <div class="editor-field"><label>Create new added course</label><div style="display:flex;gap:8px;"><input id="new-set-name" placeholder="Cardio Block 1"><button class="btn btn-primary" onclick="createHighYieldSet('${subject}')">Create</button></div></div>
       <div class="subject-grid">${names.length ? names.map(name => {
         const safe = name.replace(/'/g, "\'");
         const count = (state.customCards[subject] || []).filter(card => (card.setName || 'Quick Forge') === name).length;
         return `<div class="subject-card"><div class="subj-name">${escapeHtml(name)}</div><div class="subj-desc">${count} card${count===1?'':'s'}</div><div class="quick-row" style="margin-top:12px;"><button class="quick-btn" onclick="toggleSetFilter('${subject}', '${safe}')">${getSelectedSetNames(subject).includes(name) ? 'Unpin' : 'Pin to study'}</button><button class="quick-btn" onclick="renameHighYieldSet('${subject}', '${safe}')">Rename</button><button class="quick-btn" onclick="deleteHighYieldSet('${subject}', '${safe}')">Delete</button></div></div>`;
-      }).join('') : '<div class="subject-card"><div class="subj-name">No added courses yet</div><div class="subj-desc">Use Quick Import or Forge Card to build your first course.</div></div>'}</div>
+      }).join('') : '<div class="subject-card"><div class="subj-name">No added courses yet</div><div class="subj-desc">Use Import or Forge Card to build your first course.</div></div>'}</div>
       <div class="editor-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>
     </div></div>`;
     return;
@@ -1886,18 +1934,18 @@ function renderModal() {
           <button class="quick-btn" onclick="deleteHighYieldSet('${currentSubject}', '${safe}')">Delete</button>
         </div>
       </div>`;
-    }).join('') : '<div class="subject-card"><div class="subj-name">No added courses yet</div><div class="subj-desc">Use Quick Import or Forge Card to build one for this course.</div></div>';
+    }).join('') : '<div class="subject-card"><div class="subj-name">No added courses yet</div><div class="subj-desc">Use Import or Forge Card to build one for this course.</div></div>';
     root.innerHTML = `<div class="editor-modal"><div class="editor-panel" style="max-width:920px;">
-      <div class="setup-header"><h2>Manage Courses</h2><p>This app started from MCAT tabs, but you can treat those as optional starter tabs. Hide them and build your own added courses for med school.</p></div>
-      <div class="chapter-section">
+      <div class="setup-header"><h2>Manage Courses</h2><p>${currentSubject.startsWith('ms-') ? `Managing <b>${getSubjectLabel(currentSubject)}</b> — add courses, forge cards, or Import below.` : 'This app started from MCAT tabs, but you can treat those as optional starter tabs. Hide them and build your own added courses for med school.'}</p></div>
+      ${currentSubject.startsWith('ms-') ? '' : `<div class="chapter-section">
         <div class="ch-section-title"><span class="ch-badge ${currentSubject === 'bio' || currentSubject === 'biochem' ? 'bc' : 'ph-badge'}">Starter tabs (optional)</span></div>
         ${builtInRows}
-      </div>
+      </div>`}
       <div class="chapter-section" style="margin-top:18px;">
         <div class="ch-section-title"><span class="ch-badge ${currentSubject === 'bio' || currentSubject === 'biochem' ? 'bc' : 'ph-badge'}">Your added courses in ${escapeHtml(getSubjectLabel(currentSubject, true))}</span></div>
         <div class="quick-row" style="margin-bottom:14px;">
           <button class="quick-btn" onclick="openCardEditorForNew('${currentSubject}')">Forge Card</button>
-          <button class="quick-btn" onclick="openPasteDeckModal()">Quick Import</button>
+          <button class="quick-btn" onclick="openPasteDeckModal()">Import</button>
           <button class="quick-btn" onclick="createWrongDeckCourse('${currentSubject}')">Make Wrong Deck Course</button>
         </div>
         <div class="editor-field"><label>Create new added course</label><div style="display:flex;gap:8px;"><input id="new-set-name" placeholder="Wrong Deck or Cardio Block 1"><button class="btn btn-primary" onclick="createHighYieldSet('${currentSubject}')">Create</button></div></div>
@@ -1911,23 +1959,31 @@ function renderModal() {
     return;
   }
   if (state.pasteDeckText !== null) {
-    root.innerHTML = `<div class="editor-modal"><div class="editor-panel">
-      <div class="setup-header"><h2>Quick Import</h2><p>Format each card as q:, a:, b:, c:, d:, correct:, exp:. Use Course name to import into an existing or brand-new custom course.</p></div>
-      <div class="editor-field"><label>Subject</label><select id="paste-subject">${['bio','biochem','ps','gc','ph'].map(s => `<option value="${s}" ${(state.subject||'bio')===s?'selected':''}>${({bio:'Biology',biochem:'Biochemistry',ps:'Psych / Soc',gc:'General Chemistry',ph:'General Physics'})[s]}</option>`).join('')}</select></div>
-      <div class="editor-field"><label>Added Course Name</label><input id="paste-set-name" value="Quick Forge" placeholder="Cardio Block 1"></div>
-      <div class="editor-field"><label>Pasted deck text</label><textarea id="paste-deck-text" style="min-height:320px;">${escapeHtml(state.pasteDeckText)}</textarea></div>
-      <div class="muted-note">Example:
-q: What is ATP?
-a: Main energy currency
-b: Protein
-c: Lipid
-d: Enzyme
-correct: A
-exp: ATP stores transferable phosphate energy</div>
+    root.innerHTML = `<div class="editor-modal"><div class="editor-panel" style="max-width:780px;">
+      <div class="setup-header"><h2>Import Cards</h2><p>Upload a .txt file or paste cards below. Separate each card with a blank line. Supports any size — 10 cards or 10,000.</p></div>
+      <div class="editor-field"><label>Subject</label><select id="paste-subject" onchange="updateImportCount()">${[...['bio','biochem','ps','gc','ph'], ...(state.msBlocks||DEFAULT_MS_BLOCKS).map(b=>b.key)].map(s => { const label = s.startsWith('ms-') ? getSubjectLabel(s) : ({bio:'Biology',biochem:'Biochemistry',ps:'Psych / Soc',gc:'General Chemistry',ph:'General Physics'})[s]; return `<option value="${s}" ${(state.subject||'bio')===s?'selected':''}>${label}</option>`; }).join('')}</select></div>
+      <div class="editor-field"><label>Course Name</label><input id="paste-set-name" value="Quick Forge" placeholder="Cardio Block 1 or Week 3 Pharm"></div>
+      <div class="editor-field">
+        <label>Upload .txt file <span style="color:var(--dim);font-weight:400">— or paste below</span></label>
+        <input type="file" accept=".txt,.csv,.tsv" onchange="loadImportFile(this)" style="color:var(--text);font-size:.85rem;cursor:pointer;">
+      </div>
+      <div class="editor-field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <label style="margin:0">Card text</label>
+          <span id="import-count" style="font-size:.75rem;color:var(--dim);">Paste or upload to see card count</span>
+        </div>
+        <textarea id="paste-deck-text" oninput="updateImportCount()" style="min-height:380px;font-size:.82rem;">${escapeHtml(state.pasteDeckText)}</textarea>
+      </div>
+      <div class="muted-note" style="margin-bottom:12px;">Format (blank line between cards):
+<b>q:</b> What is the function of the mitral valve?
+<b>a:</b> Prevents backflow from LV to LA &nbsp; <b>b:</b> Pumps blood to lungs &nbsp; <b>c:</b> Opens during diastole &nbsp; <b>d:</b> Part of the right heart
+<b>correct:</b> A &nbsp; <b>exp:</b> The mitral valve is a bicuspid AV valve on the left side.</div>
       <div class="editor-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="importPastedDeckText()">Import Cards</button></div>
     </div></div>`;
+    setTimeout(updateImportCount, 0);
     return;
   }
+
   root.innerHTML = '';
 }
 function escapeHtml(str='') { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1979,6 +2035,30 @@ function saveEditorCard() {
   closeModal();
   render();
 }
+function openPasteDeckModal() { state.pasteDeckText = ''; renderModal(); setTimeout(() => { const ta = document.getElementById('paste-deck-text'); if (ta) ta.focus(); }, 0); }
+function loadImportFile(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const ta = document.getElementById('paste-deck-text');
+    if (ta) { ta.value = e.target.result; updateImportCount(); }
+  };
+  reader.readAsText(file);
+}
+function updateImportCount() {
+  const ta = document.getElementById('paste-deck-text');
+  const sel = document.getElementById('paste-subject');
+  const el = document.getElementById('import-count');
+  if (!el) return;
+  const subject = sel ? sel.value : (state.subject || 'bio');
+  const text = ta ? ta.value : '';
+  if (!text.trim()) { el.textContent = 'Paste or upload to see card count'; el.style.color = 'var(--dim)'; return; }
+  const cards = parsePastedDeckText(text, subject, 'preview');
+  el.textContent = cards.length ? `✓ ${cards.length} card${cards.length===1?'':'s'} ready to import` : '⚠ No valid cards detected yet';
+  el.style.color = cards.length ? 'var(--correct)' : 'var(--wrong)';
+}
+
 function openPasteDeckModal() { state.pasteDeckText = `q: 
 a: 
 b: 
@@ -2018,17 +2098,24 @@ function importPastedDeckText() {
   const subject = sel ? sel.value : (state.subject || 'bio');
   const setInput = document.getElementById('paste-set-name');
   const setName = (setInput ? setInput.value : 'Quick Forge').trim() || 'Quick Forge';
-  const cards = parsePastedDeckText(ta ? ta.value : state.pasteDeckText, subject, setName);
-  if (!cards.length) return alert('Could not parse any cards. Use q:, a:, b:, c:, d:, correct:, exp:');
-  const existing = new Set(getPool(subject).map(q => getQuestionUID(q)));
-  let added = 0;
-  cards.forEach(card => { if (!existing.has(card.uid)) { state.customCards[subject].push(card); existing.add(card.uid); added++; } });
+  const raw = ta ? ta.value : state.pasteDeckText;
+  const cards = parsePastedDeckText(raw, subject, setName);
+  if (!cards.length) return alert('No cards found. Make sure each card has q:, a:, b:, c:, d:, correct:, and is separated by a blank line.');
+  if (!state.customCards[subject]) state.customCards[subject] = [];
+  if (!state.selectedSetNames[subject]) state.selectedSetNames[subject] = [];
+  const existing = new Set((state.customCards[subject] || []).map(q => getQuestionUID(q)));
+  let added = 0, dupes = 0;
+  cards.forEach(card => {
+    if (!existing.has(card.uid)) { state.customCards[subject].push(card); existing.add(card.uid); added++; }
+    else dupes++;
+  });
   applyDynamicCards();
   restoreSession();
   saveBrowserProgress();
   closeModal();
   render();
-  alert(`Imported ${added} card${added===1?'':'s'} into ${setName}.`);
+  const msg = dupes ? `Imported ${added} card${added===1?'':'s'} into "${setName}". (${dupes} duplicate${dupes===1?'':'s'} skipped)` : `Imported ${added} card${added===1?'':'s'} into "${setName}".`;
+  alert(msg);
 }
 
 function getCustomSetNames(subject) {
@@ -2154,13 +2241,8 @@ function getMixedSubjects(subject) {
   return uniq([...base, ...extras]);
 }
 function getMixableSubjects(subject) {
-  const map = {
-    bio: ['biochem'],
-    biochem: ['bio'],
-    gc: ['ph'],
-    ph: ['gc'],
-    ps: []
-  };
+  if (subject && subject.startsWith('ms-')) return [];
+  const map = {bio:['biochem'],biochem:['bio'],gc:['ph'],ph:['gc'],ps:[]};
   return map[subject] || [];
 }
 function toggleMixSubject(subj) {
@@ -2186,6 +2268,7 @@ function getFilteredQs(subject) {
     else if (sub === 'ps') pool = getPsQs();
     else if (sub === 'gc') pool = getGcQs();
     else if (sub === 'ph') pool = getPhQs();
+    else if (sub.startsWith('ms-')) pool = [...(state.customCards[sub] || [])];
     const selectedSets = getSelectedSetNames(sub);
     if (selectedSets.length) pool = pool.filter(q => selectedSets.includes(q.setName || 'Quick Forge'));
     out.push(...pool);
@@ -2265,15 +2348,24 @@ function switchSubject(subj) {
 }
 function updateTabs() {
   ensureSubjectMeta();
+  const isMsMode = state.appMode === 'ms';
   const tabMap = {bio:'tab-bio', biochem:'tab-biochem', ps:'tab-ps', gc:'tab-gc', ph:'tab-ph'};
   document.getElementById('tab-home').classList.toggle('active', state.view === 'home');
+  const mcatWrap = document.getElementById('mcat-tabs');
+  if (mcatWrap) mcatWrap.style.display = isMsMode ? 'none' : '';
   Object.entries(tabMap).forEach(([subj, id]) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.style.display = isSubjectActive(subj) ? '' : 'none';
+    el.style.display = (!isMsMode && isSubjectActive(subj)) ? '' : 'none';
     el.textContent = getSubjectLabel(subj, false);
     el.classList.toggle('active', state.subject === subj && state.view !== 'tracker');
   });
+  const msTab = document.getElementById('tab-ms-active');
+  if (msTab) {
+    const isMsSub = state.subject && state.subject.startsWith('ms-');
+    msTab.style.display = (isMsSub && state.view !== 'home' && state.view !== 'tracker') ? '' : 'none';
+    if (isMsSub) { msTab.textContent = getSubjectLabel(state.subject, false); msTab.classList.toggle('active', state.view !== 'tracker'); msTab.onclick = () => switchSubject(state.subject); }
+  }
   document.getElementById('tab-tracker').classList.toggle('active', state.view === 'tracker');
 }
 function render() {
@@ -2285,7 +2377,78 @@ function render() {
   else if (state.view === 'tracker') root.innerHTML = renderTracker();
   renderModal();
 }
+function switchAppMode(mode) {
+  state.appMode = mode;
+  state.view = 'home';
+  state.subject = null;
+  document.getElementById('score-pill').style.display = 'none';
+  document.getElementById('prog-wrap').classList.add('hidden');
+  saveBrowserProgress(); updateTabs(); render();
+}
+function addMsBlock() {
+  const name = prompt('Block name (e.g. Pharmacology, Immunology):');
+  if (!name || !name.trim()) return;
+  const key = 'ms-custom-' + Date.now();
+  if (!state.msBlocks) state.msBlocks = DEFAULT_MS_BLOCKS.map(b => ({...b}));
+  state.msBlocks.push({key, label: name.trim(), icon: '📚', desc: 'Custom block — add cards via Manage Courses or Import.'});
+  state.customCards[key] = [];
+  state.selectedSetNames[key] = [];
+  saveBrowserProgress(); render();
+}
+function deleteMsBlock(key) {
+  if (!confirm('Delete this block and all its cards? This cannot be undone.')) return;
+  state.msBlocks = (state.msBlocks || []).filter(b => b.key !== key);
+  delete state.customCards[key];
+  delete state.selectedSetNames[key];
+  if (state.wrongDeck) delete state.wrongDeck[key];
+  if (state.mastery) delete state.mastery[key];
+  if (state.subject === key) { state.subject = null; state.view = 'home'; }
+  saveBrowserProgress(); render();
+}
+function renderMsHome() {
+  if (!state.msBlocks) state.msBlocks = DEFAULT_MS_BLOCKS.map(b => ({...b}));
+  const foundations = state.msBlocks.filter(b => ['ms-foundations','ms-molcells','ms-anatomy','ms-patho'].includes(b.key));
+  const systems = state.msBlocks.filter(b => !['ms-foundations','ms-molcells','ms-anatomy','ms-patho'].includes(b.key));
+  const makeCard = b => {
+    const count = (state.customCards[b.key] || []).length;
+    const wrong = (state.wrongDeck && state.wrongDeck[b.key] || []).length;
+    return `<div class="subject-card ms-subject" onclick="switchSubject('${b.key}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="subj-icon">${b.icon}</div>
+        <button onclick="event.stopPropagation();deleteMsBlock('${b.key}')" style="background:none;border:none;color:var(--dim);font-size:.75rem;cursor:pointer;padding:2px 4px;" title="Delete block">✕</button>
+      </div>
+      <div class="subj-name">${b.label}</div>
+      <div class="subj-desc">${b.desc}</div>
+      <div class="subj-count">${count ? `${count} card${count===1?'':'s'}${wrong?` · ${wrong} in Reinforce`:''}` : 'No cards yet — add via Manage Courses'}</div>
+    </div>`;
+  };
+  return `
+  <div class="home-title">
+    <h1>Med <span>School</span></h1>
+    <p>Your med school blocks. Each block is a standalone deck — add cards via Import or Forge Card.</p>
+  </div>
+  <div class="quick-row" style="margin-bottom:14px;justify-content:center;">
+    <button class="quick-btn" onclick="openSubjectManager(state.msBlocks[0] && state.msBlocks[0].key || 'ms-foundations')">Manage Courses</button>
+  </div>
+  <div class="ms-section-head">Foundations</div>
+  <div class="subject-grid">${foundations.map(makeCard).join('')}</div>
+  <div class="ms-section-head">Systems — High-Yield Core</div>
+  <div class="subject-grid">${systems.map(makeCard).join('')}</div>
+  <div class="subject-grid" style="margin-top:8px;">
+    <div class="ms-add-card" onclick="addMsBlock()">＋ Add Block</div>
+    <div class="subject-card" onclick="switchSubject('tracker')">
+      <div class="subj-icon">📊</div><div class="subj-name">Tracker</div>
+      <div class="subj-desc">Coverage across all your blocks.</div>
+      <div class="subj-count">Coverage by subject</div>
+    </div>
+  </div>`;
+}
 function renderHome() {
+  const modeToggle = `<div class="mode-toggle">
+    <button class="mode-btn ${state.appMode==='mcat'?'active':''}" onclick="switchAppMode('mcat')">MCAT</button>
+    <button class="mode-btn ${state.appMode==='ms'?'ms-active':''}" onclick="switchAppMode('ms')">Med School</button>
+  </div>`;
+  if (state.appMode === 'ms') return modeToggle + renderMsHome();
   const defs = {
     bio:{desc:'Standalone biology bank so cell, micro, genetics, and physiology-style concepts stay separate from biochem.', count:`${ENHANCED_POOLS.bio.length} questions · 11 chapters`},
     biochem:{desc:'Standalone biochemistry bank with amino acids, enzymes, acid-base, metabolism, and higher-yield molecular logic.', count:`${ENHANCED_POOLS.biochem.length} questions · 9 chapters`},
@@ -2299,7 +2462,7 @@ function renderHome() {
       <div class="subj-desc">${defs[sub].desc}</div>
       <div class="subj-count">${defs[sub].count}</div>
     </div>`).join('');
-  return `
+  return `${modeToggle}
   <div class="home-title">
     <h1>HY <span>Forge</span></h1>
     <p>Build courses, mix subjects, import question blocks fast, and review with Reinforce and Locked In decks.</p>
@@ -2339,12 +2502,15 @@ function renderSetup() {
   const resumeAvailable = !!(state.lastSession && state.lastSession.subject === state.subject && state.lastSession.view === 'quiz');
   const mixedSubjects = getMixedSubjects(state.subject);
   const mixable = getMixableSubjects(state.subject);
+  const isMsSub = state.subject && state.subject.startsWith('ms-');
   let sections = '';
-  if (state.subject === 'bio') sections = renderChapterSection('Bio','bio',BIO_CH,state.selBioCh);
-  else if (state.subject === 'biochem') sections = renderChapterSection('Biochem','bc',BC_CH,state.selBcCh);
-  else if (state.subject === 'ps') sections = renderChapterSection('Psych/Soc','ps',PS_CH,state.selPsCh);
-  else if (state.subject === 'gc') sections = renderChapterSection('Gen Chem','gc-badge',GC_CH,state.selGcCh);
-  else if (state.subject === 'ph') sections = renderChapterSection('Gen Phys','ph-badge',PH_CH,state.selPhCh);
+  if (!isMsSub) {
+    if (state.subject === 'bio') sections = renderChapterSection('Bio','bio',BIO_CH,state.selBioCh);
+    else if (state.subject === 'biochem') sections = renderChapterSection('Biochem','bc',BC_CH,state.selBcCh);
+    else if (state.subject === 'ps') sections = renderChapterSection('Psych/Soc','ps',PS_CH,state.selPsCh);
+    else if (state.subject === 'gc') sections = renderChapterSection('Gen Chem','gc-badge',GC_CH,state.selGcCh);
+    else if (state.subject === 'ph') sections = renderChapterSection('Gen Phys','ph-badge',PH_CH,state.selPhCh);
+  }
   const setNames = getCustomSetNames(state.subject);
   const selectedSets = getSelectedSetNames(state.subject);
   const setHtml = setNames.length ? `
@@ -2376,7 +2542,7 @@ function renderSetup() {
   </div>
   <div class="quick-row" style="margin-bottom:18px;">
     <button class="quick-btn" onclick="openCardEditorForNew()">Forge Card</button>
-    <button class="quick-btn" onclick="openPasteDeckModal()">Quick Import</button>
+    <button class="quick-btn" onclick="openPasteDeckModal()">Import</button>
     <button class="quick-btn" onclick="openSubjectManager('${state.subject}')">Manage Courses</button>
   </div>
   ${setHtml}
@@ -2524,7 +2690,10 @@ function renderQuiz() {
     ? `<div class="options">${optsHtml}</div>`
     : `<div class="recall-banner">
         <span>🧠 Try to recall the answer — then reveal choices when ready.</span>
-        <button class="btn-reveal" onclick="revealOptions()">Reveal Choices →</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-dont-know" onclick="dontKnow()">✗ DON'T KNOW</button>
+          <button class="btn-reveal" onclick="revealOptions()">Reveal Choices →</button>
+        </div>
       </div>`;
 
   const recallChecked = state.recallMode ? 'checked' : '';
@@ -2597,7 +2766,7 @@ function pick(i) {
   if (state.locked || (uid in state.answers)) return;
   markQuestionTouched(q);
   state.selected = i; state.answers[uid] = i; state.locked = true;
-  const isCorrect = i === q.c;
+  const isCorrect = i === q.c && !state.dontKnowPressed;
   const qSubject = getQuestionSubject(q);
   if (state.mode === 'normal') {
     if (isCorrect) addToDeck(state.mastery, qSubject, uid);
@@ -2609,6 +2778,13 @@ function pick(i) {
     if (!isCorrect) state.sessionWrongUIDs.push(uid);
   }
   saveBrowserProgress(); updateScore(); applyLocked();
+}
+function dontKnow() {
+  const uid = getQuestionUID(state.qs[state.idx]);
+  if (state.locked || (uid in state.answers)) return;
+  state.dontKnowPressed = true;
+  state.optionsRevealed = true;
+  renderQuiz();
 }
 function revealOptions() {
   state.optionsRevealed = true;
@@ -2632,8 +2808,8 @@ function applyLocked() {
   const ok = i === q.c;
   const fh = document.getElementById('footer-hint');
   const missMsg = (state.subject === 'gc' || state.subject === 'ph') ? '✗ Incorrect — sent to Reinforce. Check the equation and units below.' : '✗ Incorrect — sent to Reinforce';
-  fh.textContent = ok ? '✓ Correct!' : missMsg;
-  fh.style.color = ok ? 'var(--correct)' : 'var(--wrong)';
+  fh.textContent = state.dontKnowPressed ? "✗ Sent to Reinforce — you pressed Don't Know" : (ok ? '✓ Correct!' : missMsg);
+  fh.style.color = (ok && !state.dontKnowPressed) ? 'var(--correct)' : 'var(--wrong)';
   document.getElementById('next-btn').style.display = 'inline-block';
 }
 function exitSessionToSetup() {
