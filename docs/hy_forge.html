@@ -1480,16 +1480,20 @@ function markQuestionTouched(q) {
     state.touchedBySubject[sub].push(uid);
   }
 }
-
 function saveBrowserProgress() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
-  const el = document.getElementById('save-status');
-  if (el) {
-    el.textContent = 'Saved to browser';
-    setTimeout(() => {
-      const t = document.getElementById('save-status');
-      if (t) t.textContent = 'Auto-save on';
-    }, 1200);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    const el = document.getElementById('save-status');
+    if (el) {
+      el.textContent = 'Saved to browser';
+      setTimeout(() => {
+        const t = document.getElementById('save-status');
+        if (t) t.textContent = 'Auto-save on';
+      }, 1200);
+    }
+  } catch (e) {
+    console.error('localStorage ERROR:', e);
+    throw e;
   }
 }
 function loadBrowserProgress() {
@@ -2035,29 +2039,6 @@ function saveEditorCard() {
   closeModal();
   render();
 }
-function openPasteDeckModal() { state.pasteDeckText = ''; renderModal(); setTimeout(() => { const ta = document.getElementById('paste-deck-text'); if (ta) ta.focus(); }, 0); }
-function loadImportFile(input) {
-  const file = input && input.files && input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const ta = document.getElementById('paste-deck-text');
-    if (ta) { ta.value = e.target.result; updateImportCount(); }
-  };
-  reader.readAsText(file);
-}
-function updateImportCount() {
-  const ta = document.getElementById('paste-deck-text');
-  const sel = document.getElementById('paste-subject');
-  const el = document.getElementById('import-count');
-  if (!el) return;
-  const subject = sel ? sel.value : (state.subject || 'bio');
-  const text = ta ? ta.value : '';
-  if (!text.trim()) { el.textContent = 'Paste or upload to see card count'; el.style.color = 'var(--dim)'; return; }
-  const cards = parsePastedDeckText(text, subject, 'preview');
-  el.textContent = cards.length ? `✓ ${cards.length} card${cards.length===1?'':'s'} ready to import` : '⚠ No valid cards detected yet';
-  el.style.color = cards.length ? 'var(--correct)' : 'var(--wrong)';
-}
 
 function openPasteDeckModal() { state.pasteDeckText = `q: 
 a: 
@@ -2093,29 +2074,66 @@ function parsePastedDeckText(raw, subject, setName) {
   return cards;
 }
 function importPastedDeckText() {
-  const ta = document.getElementById('paste-deck-text');
-  const sel = document.getElementById('paste-subject');
-  const subject = sel ? sel.value : (state.subject || 'bio');
-  const setInput = document.getElementById('paste-set-name');
-  const setName = (setInput ? setInput.value : 'Quick Forge').trim() || 'Quick Forge';
-  const raw = ta ? ta.value : state.pasteDeckText;
-  const cards = parsePastedDeckText(raw, subject, setName);
-  if (!cards.length) return alert('No cards found. Make sure each card has q:, a:, b:, c:, d:, correct:, and is separated by a blank line.');
-  if (!state.customCards[subject]) state.customCards[subject] = [];
-  if (!state.selectedSetNames[subject]) state.selectedSetNames[subject] = [];
-  const existing = new Set((state.customCards[subject] || []).map(q => getQuestionUID(q)));
-  let added = 0, dupes = 0;
-  cards.forEach(card => {
-    if (!existing.has(card.uid)) { state.customCards[subject].push(card); existing.add(card.uid); added++; }
-    else dupes++;
-  });
-  applyDynamicCards();
-  restoreSession();
-  saveBrowserProgress();
-  closeModal();
-  render();
-  const msg = dupes ? `Imported ${added} card${added===1?'':'s'} into "${setName}". (${dupes} duplicate${dupes===1?'':'s'} skipped)` : `Imported ${added} card${added===1?'':'s'} into "${setName}".`;
-  alert(msg);
+  try {
+    const ta = document.getElementById('paste-deck-text');
+    const sel = document.getElementById('paste-subject');
+    const subject = sel ? sel.value : (state.subject || 'bio');
+    const setInput = document.getElementById('paste-set-name');
+    const setName = (setInput ? setInput.value : 'Quick Forge').trim() || 'Quick Forge';
+    const raw = ta ? ta.value : state.pasteDeckText;
+
+    const cards = parsePastedDeckText(raw, subject, setName);
+
+    if (!cards.length) {
+      alert('No cards found. Make sure each card has q:, a:, b:, c:, d:, correct:, and is separated by a blank line.');
+      return;
+    }
+
+    if (!state.customCards[subject]) state.customCards[subject] = [];
+    if (!state.selectedSetNames[subject]) state.selectedSetNames[subject] = [];
+
+    const existing = new Set((state.customCards[subject] || []).map(q => getQuestionUID(q)));
+    let added = 0;
+    let dupes = 0;
+
+    cards.forEach(card => {
+      if (!existing.has(card.uid)) {
+        state.customCards[subject].push(card);
+        existing.add(card.uid);
+        added++;
+      } else {
+        dupes++;
+      }
+    });
+
+    applyDynamicCards();
+
+    if (subject === state.subject) {
+      restoreSession();
+    }
+
+    closeModal();
+    state.subject = subject;
+    state.view = 'setup';
+    render();
+
+    try {
+      saveBrowserProgress();
+    } catch (e) {
+      console.error('Save failed:', e);
+      alert('Cards imported and should now be visible, but browser save failed because localStorage is full. Do NOT refresh yet.');
+    }
+
+    const msg = dupes
+      ? `Imported ${added} card${added===1?'':'s'} into "${setName}". (${dupes} duplicate${dupes===1?'':'s'} skipped)`
+      : `Imported ${added} card${added===1?'':'s'} into "${setName}".`;
+
+    alert(msg);
+
+  } catch (e) {
+    console.error('IMPORT ERROR:', e);
+    alert('Import failed — open console (F12) to see error.');
+  }
 }
 
 function getCustomSetNames(subject) {
