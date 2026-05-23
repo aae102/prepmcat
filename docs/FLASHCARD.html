@@ -165,7 +165,7 @@
     .rBtn{flex:1;min-width:118px;padding:12px 8px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,0.04);font-weight:900;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
     .rBtn span:last-child{opacity:.55;font-size:10px}
     .studyFoot{display:flex;gap:14px;justify-content:center;padding:14px 0;font-size:13px;border-top:1px solid var(--border);margin-top:14px;flex-wrap:wrap}
-    .mcOptions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:10px}
+    .mcOptions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:10px} .mcGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;margin-top:14px} .mcGridBtn{padding:14px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-weight:700;font-size:13px;text-align:left;cursor:pointer;transition:border-color .15s,background .15s;display:flex;gap:10px;align-items:flex-start;line-height:1.4} .mcGridBtn:hover{border-color:rgba(129,140,248,.4);background:rgba(129,140,248,.07)} .mcGridBtn.correct{border-color:rgba(74,222,128,.6)!important;background:rgba(22,163,74,.18)!important;color:var(--green)!important} .mcGridBtn.wrong{border-color:rgba(248,113,113,.6)!important;background:rgba(220,38,38,.18)!important;color:var(--red)!important} .mcGridBtn.reveal{border-color:rgba(74,222,128,.4)!important;background:rgba(22,163,74,.10)!important} .mcGridLetter{font-family:'IBM Plex Mono',monospace;font-weight:900;font-size:14px;flex-shrink:0;opacity:.7}
     .mcBtn{width:100%;text-align:left;padding:12px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-weight:900}
     .mcBtn:hover{border-color:rgba(129,140,248,.35)}
     .done{max-width:520px;margin:auto;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:40px 34px;text-align:center}
@@ -868,6 +868,7 @@ function sidebarHTML(){
       <button data-nav="add" class="${SCREEN==='add'?'active':''}">+ Add Deck</button>
       <button data-nav="manage" class="${SCREEN==='manage'?'active':''}">▦ Manage</button>
       <button data-nav="custom" class="${SCREEN==='custom'?'active':''}">⊕ Custom Study</button>
+      <button data-nav="mcmode" class="${SCREEN==='mcmode'?'active':''}">◈ MC Mode</button>
       <button data-nav="calendar" class="${SCREEN==='calendar'?'active':''}">◷ Calendar</button>
       <button onclick="window.location.href='./index.html'" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid rgba(129,140,248,.25);background:rgba(129,140,248,.08);color:var(--purple);font-size:13px;text-align:left;cursor:pointer;margin-top:4px">← Back to Tracker</button>
     </nav>
@@ -954,6 +955,7 @@ function mobileNavHTML(){
     {s:"manage",   icon:"▦",label:"Manage"},
     {s:"custom",   icon:"⊕",label:"Custom"},
     {s:"calendar", icon:"◷",label:"Calendar"},
+    {s:"mcmode",   icon:"◈",label:"MC"},
   ];
   return `<nav class="mobile-nav">${items.map(i=>`
     <button data-nav="${i.s}" class="${SCREEN===i.s?'active':''}">
@@ -978,6 +980,7 @@ function render(){
   else if (SCREEN === "manage")  main = manageHTML();
   else if (SCREEN === "custom")  main = customHTML();
   else if (SCREEN === "calendar") main = calendarHTML();
+  else if (SCREEN === "mcmode")  main = mcModeHTML();
 
   root.innerHTML = `<div class="app">${sidebar}<div class="main">${main}</div></div>${mobileNavHTML()}`;
   bindNav();
@@ -986,6 +989,7 @@ function render(){
   else if (SCREEN === "manage")  bindManage();
   else if (SCREEN === "custom")  bindCustom();
   else if (SCREEN === "calendar") bindCalendar();
+  else if (SCREEN === "mcmode")  bindMCMode();
 }
 
 /******************************************************************
@@ -1401,6 +1405,378 @@ function calendarHTML(){
   `;
 }
 function bindCalendar(){}
+/******************************************************************
+ * MC MODE
+ ******************************************************************/
+let MC_DECK_ID = "all";
+let MC_STATE = null; // current quiz state
+
+function parseMCTxt(text){
+  // Format:
+  // Q: question text
+  // A- option
+  // B- option
+  // C- option
+  // D- option
+  // Answer: B explanation text
+  const cards = [];
+  const blocks = text.split(/\n\s*\n/).filter(Boolean);
+  for (const block of blocks){
+    const lines = block.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    let question="", options={}, answerKey="", explanation="";
+    for (const line of lines){
+      const qm = line.match(/^Q[:\.]?\s+(.+)/i);
+      if (qm){ question = qm[1]; continue; }
+      const om = line.match(/^([A-D])[\-\.\)]\s*(.+)/i);
+      if (om){ options[om[1].toUpperCase()] = om[2]; continue; }
+      const am = line.match(/^Answer[:\.]?\s*([A-D])[\.\-\)]?\s*(.*)/i);
+      if (am){ answerKey = am[1].toUpperCase(); explanation = am[2]; continue; }
+    }
+    if (question && Object.keys(options).length >= 2 && answerKey){
+      cards.push({ question, options, answerKey, explanation });
+    }
+  }
+  return cards;
+}
+
+function buildMCFromDeck(deck){
+  // Auto-generate MC from regular flashcard back answers
+  const cards = (deck.cards||[]).filter(c=>c.front && c.back);
+  if (cards.length < 4) return [];
+  const result = [];
+  for (let i=0; i<cards.length; i++){
+    const correct = cards[i];
+    const pool = cards.filter((_,j)=>j!==i);
+    const shuffled = shuffle(pool).slice(0,3);
+    const opts = shuffle([correct, ...shuffled]);
+    const letters = ["A","B","C","D"];
+    const options = {};
+    let answerKey = "";
+    opts.forEach((c,idx)=>{
+      options[letters[idx]] = c.back;
+      if (c.id === correct.id) answerKey = letters[idx];
+    });
+    result.push({ question: correct.front, options, answerKey, explanation: "" });
+  }
+  return result;
+}
+
+function mcModeHTML(){
+  const decks = Object.entries(DATA.decks);
+  const mcDecks = Object.entries(DATA.decks).filter(([,d])=>d.mcCards?.length);
+
+  let deckOptions = `<option value="all">All Decks (auto-generate MC)</option>`;
+  for (const [id, d] of decks){
+    deckOptions += `<option value="${id}" ${MC_DECK_ID===id?'selected':''}>${escapeHTML(d.name)} (${d.cards?.length||0} cards)</option>`;
+  }
+  for (const [id, d] of mcDecks){
+    deckOptions += `<option value="mc_${id}" ${MC_DECK_ID===`mc_${id}`?'selected':''}>★ ${escapeHTML(d.name)} — Imported MC (${d.mcCards.length} Q)</option>`;
+  }
+
+  // If quiz is active, show quiz UI
+  if (MC_STATE && MC_STATE.active){
+    const q = MC_STATE.questions[MC_STATE.idx];
+    const letters = ["A","B","C","D"];
+    const answered = MC_STATE.answered;
+
+    const optButtons = letters
+      .filter(l=>q.options[l])
+      .map(l=>{
+        let cls = "mcGridBtn";
+        if (answered){
+          if (l === q.answerKey) cls += " correct";
+          else if (l === MC_STATE.picked && l !== q.answerKey) cls += " wrong";
+        }
+        return `<button class="mcGridBtn ${answered ? (l===q.answerKey ? 'correct' : (l===MC_STATE.picked && l!==q.answerKey ? 'wrong':'')) : ''}" data-pick="${l}">
+          <span class="mcGridLetter">${l}</span>
+          <span>${escapeHTML(q.options[l])}</span>
+        </button>`;
+      }).join("");
+
+    const pct = MC_STATE.questions.length ? Math.round((MC_STATE.idx/MC_STATE.questions.length)*100) : 0;
+
+    return `
+      ${headerHTML(true)}
+      <div style="max-width:720px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="greeting">MC Mode</div>
+            <div class="date">Q ${MC_STATE.idx+1} of ${MC_STATE.questions.length}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="tag green">✓ ${MC_STATE.correct}</span>
+            <span class="tag purple" style="font-size:12px">${pct}%</span>
+            <button class="btnSmall btnDanger" id="mcQuitBtn">✕ Quit</button>
+          </div>
+        </div>
+
+        <div class="track" style="margin-bottom:20px"><div class="fill" style="width:${pct}%"></div></div>
+
+        <div class="flash" style="min-height:120px;margin-bottom:16px">
+          <div class="q">${escapeHTML(q.question)}</div>
+        </div>
+
+        <div class="mcGrid" id="mcGrid">
+          ${optButtons}
+        </div>
+
+        ${answered ? `
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+            ${q.explanation ? `
+              <div class="box" style="border-color:rgba(74,222,128,.25);background:rgba(22,163,74,.08)">
+                <span style="font-weight:900;color:var(--green)">Explanation: </span>${escapeHTML(q.explanation)}
+              </div>` : ''}
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+              ${MC_STATE.idx+1 < MC_STATE.questions.length
+                ? `<button class="btnPrimary" id="mcNextBtn" style="padding:12px 32px;font-size:15px">Next →</button>`
+                : `<button class="btnPrimary" id="mcNextBtn" style="padding:12px 32px;font-size:15px;background:linear-gradient(135deg,var(--green),var(--cyan))">See Results →</button>`}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  // Results screen
+  if (MC_STATE && MC_STATE.done){
+    const pct = MC_STATE.questions.length ? Math.round((MC_STATE.correct/MC_STATE.questions.length)*100) : 0;
+    return `
+      ${headerHTML(true)}
+      <div class="done" style="max-width:520px">
+        <div class="ic">◈</div>
+        <div class="t">MC Session Done!</div>
+        <div class="s">
+          ${MC_STATE.correct}/${MC_STATE.questions.length} correct · ${pct}% accuracy
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+          ${pct>=80?`<div class="box ok">🎉 Great job! Above 80%</div>`:''}
+          ${pct<60?`<div class="box err">Keep practicing — under 60%</div>`:''}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btnPrimary" id="mcRestartBtn">↺ Restart</button>
+          <button class="btnOutline" id="mcBackBtn">← Back</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Setup screen
+  return `
+    ${headerHTML(true)}
+    <div style="max-width:720px">
+      <div style="margin-bottom:22px">
+        <div class="greeting">MC Mode</div>
+        <div class="date" style="margin-top:6px">Drill flashcards as 4-option multiple choice · import dedicated MC .txt decks</div>
+      </div>
+
+      <!-- Import MC txt -->
+      <div class="box" style="margin-bottom:18px">
+        <div style="font-weight:900;margin-bottom:4px;font-size:14px">Import MC Deck (.txt)</div>
+        <div class="note" style="margin-bottom:12px">
+          Format each question block separated by a blank line:<br>
+          <span class="mono" style="font-size:11px;color:var(--cyan)">Q: What is the powerhouse of the cell?<br>A- Nucleus<br>B- Mitochondria<br>C- Ribosome<br>D- Golgi<br>Answer: B The mitochondria produces ATP</span>
+        </div>
+        <input class="input" id="mcDeckNameInput" placeholder="Deck name for this MC set" style="margin-bottom:10px" />
+       <div style="display:flex;gap:8px;margin-bottom:10px">
+  <button class="modeBtn active" id="mcTabUpload">↑ Upload .txt</button>
+  <button class="modeBtn" id="mcTabPaste">✎ Paste Text</button>
+</div>
+<div id="mcUploadArea">
+  <div class="upload" id="mcUploadZone" style="margin-bottom:10px">
+    <div style="font-size:24px;margin-bottom:6px">◉</div>
+    <div style="color:var(--muted);font-weight:900">Click to upload MC .txt file</div>
+  </div>
+  <input type="file" id="mcFileInput" accept=".txt" style="display:none" />
+</div>
+<div id="mcPasteArea_wrap" style="display:none">
+  <textarea class="textarea" id="mcPasteArea" rows="8"
+    placeholder="Q: What is the powerhouse of the cell?&#10;A- Nucleus&#10;B- Mitochondria&#10;C- Ribosome&#10;D- Golgi&#10;Answer: B The mitochondria produces ATP&#10;&#10;Q: Next question...&#10;A- ..."></textarea>
+  <button class="btnSmall" id="mcParseTextBtn"
+    style="margin-top:8px;color:var(--purple);border-color:rgba(129,140,248,.3);padding:7px 16px">
+    ▶ Preview Questions
+  </button>
+</div>
+<div id="mcImportMsg"></div>
+        <button class="btnPrimary" id="mcImportBtn" style="margin-top:10px;width:100%">Import MC Deck</button>
+      </div>
+
+      <!-- Start quiz -->
+      <div class="box">
+        <div style="font-weight:900;margin-bottom:10px;font-size:14px">Start Quiz</div>
+        <div style="margin-bottom:12px">
+          <div class="tiny" style="color:var(--muted);font-weight:900;margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em">Select Deck</div>
+          <select class="input" id="mcDeckSel">${deckOptions}</select>
+        </div>
+        <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1">
+            <div class="tiny" style="color:var(--muted);font-weight:900;margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em">Number of Questions</div>
+            <input class="input" id="mcCount" type="number" value="20" min="4" max="200" />
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:900;cursor:pointer;align-self:flex-end;padding-bottom:2px">
+            <input type="checkbox" id="mcShuffle" checked /> Shuffle
+          </label>
+        </div>
+        <button class="btnPrimary" id="mcStartBtn" style="width:100%;padding:14px 0;font-size:15px">▶ Start MC Quiz</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindMCMode(){
+  const backBtn = document.getElementById("backDash");
+  if (backBtn) backBtn.onclick = ()=> setScreen("dashboard");
+
+  // Results buttons
+  const restartBtn = document.getElementById("mcRestartBtn");
+  if (restartBtn) restartBtn.onclick = ()=>{
+    MC_STATE = {...MC_STATE, idx:0, correct:0, answered:false, picked:null, done:false, active:true,
+      questions: shuffle(MC_STATE.questions)};
+    render();
+  };
+  const backMcBtn = document.getElementById("mcBackBtn");
+  if (backMcBtn) backMcBtn.onclick = ()=>{ MC_STATE=null; render(); };
+
+  // Quit mid-quiz
+  const quitBtn = document.getElementById("mcQuitBtn");
+  if (quitBtn) quitBtn.onclick = ()=>{ MC_STATE=null; render(); };
+
+  // Next button
+  const nextBtn = document.getElementById("mcNextBtn");
+  if (nextBtn) nextBtn.onclick = ()=>{
+    if (MC_STATE.idx+1 >= MC_STATE.questions.length){
+      MC_STATE.done = true;
+      MC_STATE.active = false;
+    } else {
+      MC_STATE.idx++;
+      MC_STATE.answered = false;
+      MC_STATE.picked = null;
+    }
+    render();
+  };
+
+  // Answer buttons
+  document.querySelectorAll("[data-pick]").forEach(btn=>{
+    btn.onclick = ()=>{
+      if (MC_STATE.answered) return;
+      const pick = btn.dataset.pick;
+      MC_STATE.picked = pick;
+      MC_STATE.answered = true;
+      if (pick === MC_STATE.questions[MC_STATE.idx].answerKey) MC_STATE.correct++;
+      render();
+    };
+  });
+
+  // File import
+  const uploadZone = document.getElementById("mcUploadZone");
+  const fileInput  = document.getElementById("mcFileInput");
+  if (uploadZone) uploadZone.onclick = ()=> fileInput?.click();
+let mcParsedCards = [];
+
+function parseMCInput(text, sourceName){
+  mcParsedCards = parseMCTxt(text);
+  const msg = document.getElementById("mcImportMsg");
+  if (msg) msg.innerHTML = mcParsedCards.length
+    ? `<div class="box ok">Parsed ${mcParsedCards.length} questions from "${escapeHTML(sourceName)}"</div>`
+    : `<div class="box err">No questions found. Check format.</div>`;
+}
+
+if (fileInput) fileInput.onchange = async (e)=>{
+  const file = e.target.files?.[0]; if (!file) return;
+  const text = await file.text();
+  parseMCInput(text, file.name);
+};
+
+const mcPasteArea = document.getElementById("mcPasteArea");
+const mcParseTextBtn = document.getElementById("mcParseTextBtn");
+if (mcParseTextBtn) mcParseTextBtn.onclick = ()=>{
+  const text = mcPasteArea?.value?.trim();
+  if (!text){ alert("Paste some text first."); return; }
+  parseMCInput(text, "pasted text");
+};
+
+  const importBtn = document.getElementById("mcImportBtn");
+  if (importBtn) importBtn.onclick = ()=>{
+    const name = document.getElementById("mcDeckNameInput")?.value.trim();
+    if (!name){ alert("Enter a deck name."); return; }
+    if (!mcParsedCards.length){ alert("Upload and parse a .txt file first."); return; }
+    updateData(d=>{
+      const id = `mcdeck_${Date.now()}`;
+      d.decks[id] = { name, cards:[], mcCards: mcParsedCards, createdAt: new Date().toISOString() };
+    });
+    alert(`✓ Imported "${name}" with ${mcParsedCards.length} MC questions.`);
+    mcParsedCards = [];
+    render();
+  };
+
+  const mcTabUpload = document.getElementById("mcTabUpload");
+const mcTabPaste  = document.getElementById("mcTabPaste");
+const mcUploadArea = document.getElementById("mcUploadArea");
+const mcPasteWrap  = document.getElementById("mcPasteArea_wrap");
+
+if (mcTabUpload) mcTabUpload.onclick = ()=>{
+  mcTabUpload.classList.add("active");
+  mcTabPaste.classList.remove("active");
+  mcUploadArea.style.display = "block";
+  mcPasteWrap.style.display  = "none";
+};
+if (mcTabPaste) mcTabPaste.onclick = ()=>{
+  mcTabPaste.classList.add("active");
+  mcTabUpload.classList.remove("active");
+  mcUploadArea.style.display = "none";
+  mcPasteWrap.style.display  = "block";
+};
+  // Deck selector
+  const deckSel = document.getElementById("mcDeckSel");
+  if (deckSel) deckSel.onchange = ()=>{ MC_DECK_ID = deckSel.value; };
+
+  // Start quiz
+  const startBtn = document.getElementById("mcStartBtn");
+  if (startBtn) startBtn.onclick = ()=>{
+    const deckVal = document.getElementById("mcDeckSel")?.value || "all";
+    const count   = Number(document.getElementById("mcCount")?.value || 20);
+    const doShuffle = document.getElementById("mcShuffle")?.checked ?? true;
+    let questions = [];
+
+    if (deckVal.startsWith("mc_")){
+      const id = deckVal.replace("mc_","");
+      questions = (DATA.decks[id]?.mcCards || []).slice();
+    } else if (deckVal === "all"){
+      for (const deck of Object.values(DATA.decks)){
+        if (deck.mcCards?.length) questions.push(...deck.mcCards);
+        else questions.push(...buildMCFromDeck(deck));
+      }
+    } else {
+      const deck = DATA.decks[deckVal];
+      if (deck?.mcCards?.length) questions = deck.mcCards.slice();
+      else questions = buildMCFromDeck(deck);
+    }
+
+    if (!questions.length){ alert("Not enough cards to build MC questions. Need at least 4."); return; }
+    if (doShuffle) questions = shuffle(questions);
+    questions = questions.slice(0, count);
+
+    MC_STATE = { questions, idx:0, correct:0, answered:false, picked:null, active:true, done:false };
+    render();
+  };
+
+  // Keyboard: A/B/C/D to pick, Enter/Space for next
+  window.__mcKeyHandler = (e)=>{
+    if (SCREEN !== "mcmode") return;
+    if (!MC_STATE?.active) return;
+    if (e.target?.tagName === "INPUT" || e.target?.tagName === "TEXTAREA") return;
+    const key = e.key.toUpperCase();
+    if (!MC_STATE.answered && ["A","B","C","D"].includes(key)){
+      e.preventDefault();
+      const btn = document.querySelector(`[data-pick="${key}"]`);
+      if (btn) btn.click();
+    }
+    if (MC_STATE.answered && (e.key === "Enter" || e.code === "Space")){
+      e.preventDefault();
+      document.getElementById("mcNextBtn")?.click();
+    }
+  };
+  window.addEventListener("keydown", window.__mcKeyHandler);
+}
 
 /******************************************************************
  * ADD DECK
