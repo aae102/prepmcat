@@ -189,42 +189,113 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .notification{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;color:var(--text);z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
 .notification.show{opacity:1}
 .kbd{font-family:var(--mono);font-size:10px;padding:2px 5px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text3)}
+
+/* ===== NEW FEATURES CSS ===== */
+.btn-pause{background:rgba(234,179,8,.15);color:var(--yellow);border:1px solid rgba(234,179,8,.4);min-width:36px}
+.btn-pause:hover{background:rgba(234,179,8,.25)}
+.btn-pause.paused{background:rgba(34,197,94,.15);color:var(--green);border-color:rgba(34,197,94,.4)}
+.paused-banner{display:none;background:rgba(234,179,8,.12);border-bottom:1px solid rgba(234,179,8,.3);padding:6px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--yellow);letter-spacing:.5px}
+#session-screen.paused .paused-banner{display:block}
+#session-screen.paused .session-body{pointer-events:none;filter:blur(2px)}
+.stat-pill.mastered .val{color:var(--yellow)}
+.options-panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;width:100%;max-width:440px}
+.options-panel h3{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);margin-bottom:12px;font-family:var(--mono)}
+.opt-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.opt-row:last-child{margin-bottom:0}
+.opt-label{font-size:11px;color:var(--text3);font-family:var(--mono);min-width:64px;flex-shrink:0}
+.chip{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border2);cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:700;transition:all .15s;color:var(--text3);background:transparent;white-space:nowrap}
+.chip.on.bb{border-color:var(--bb);color:var(--bb);background:rgba(56,189,248,.12)}
+.chip.on.cp{border-color:var(--cp);color:var(--cp);background:rgba(168,85,247,.12)}
+.chip.on.ps{border-color:var(--ps);color:var(--ps);background:rgba(34,197,94,.12)}
+.chip.on.y{border-color:var(--yellow);color:var(--yellow);background:rgba(234,179,8,.12)}
+.chip.on.r{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.12)}
+.chip.on.w{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,.1)}
+.queue-opts{display:flex;flex-direction:column;gap:5px;width:100%}
+.qopt{display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;border-radius:7px;border:1.5px solid var(--border);transition:all .15s}
+.qopt:hover{border-color:var(--border2)}
+.qopt.active{border-color:var(--accent);background:rgba(56,189,248,.07)}
+.qdot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border2);transition:all .15s;flex-shrink:0}
+.qopt.active .qdot{border-color:var(--accent);background:var(--accent)}
+.qopt-text{font-size:12px;color:var(--text2)}
+.qopt.active .qopt-text{color:var(--text)}
+.mnemonic-btn{padding:6px 12px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);border-radius:6px;color:var(--purple);cursor:pointer;font-size:11px;font-family:var(--mono);transition:all .15s;white-space:nowrap}
+.mnemonic-btn:hover{background:rgba(168,85,247,.2)}
+.mnemonic-display{margin-top:8px;padding:10px 12px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.2);border-radius:8px;font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.mnemonic-display img{max-width:100%;max-height:180px;border-radius:6px;margin-top:6px;display:block}
+.mnemonic-edit-area{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;resize:vertical;min-height:60px;outline:none;transition:border .15s}
+.mnemonic-edit-area:focus{border-color:var(--purple)}
+.img-drop{border:2px dashed rgba(168,85,247,.3);border-radius:7px;padding:10px;text-align:center;cursor:pointer;transition:all .15s;background:rgba(168,85,247,.04);margin-top:6px;font-size:12px;color:var(--text3)}
+.img-drop:hover,.img-drop.dragover{border-color:var(--purple);background:rgba(168,85,247,.1)}
+#mastered-screen{flex-direction:column}
+.mastered-header{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.mastered-header h2{font-family:var(--mono);font-size:16px;color:var(--yellow)}
+.mastered-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:all .15s}
+.mastered-item:hover{border-color:var(--yellow)}
+.mastered-badge{background:rgba(234,179,8,.15);color:var(--yellow);border:1px solid rgba(234,179,8,.3);padding:2px 7px;border-radius:4px;font-family:var(--mono);font-size:10px;white-space:nowrap}
+.demote-btn{padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--text3);cursor:pointer;font-size:11px;transition:all .15s;white-space:nowrap}
+.demote-btn:hover{border-color:var(--red);color:var(--red)}
+
 </style>
 </head>
 <body>
 
 <!-- HOME SCREEN -->
-<div id="home-screen" class="screen">
+<div id="home-screen" class="screen" style="overflow-y:auto;justify-content:flex-start;align-items:center">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:20px 16px;max-width:440px;margin:0 auto;width:100%">
   <div class="logo">
     <h1>WHAT'S ON <span>//</span> THE MCAT</h1>
     <p>310 discrete questions · BB · CP · PS</p>
   </div>
   <div class="stats-bar">
-    <div class="stat-pill bb"><div class="val" id="stat-bb">0</div><div class="lbl">BB</div></div>
-    <div class="stat-pill cp"><div class="val" id="stat-cp">0</div><div class="lbl">CP</div></div>
-    <div class="stat-pill ps"><div class="val" id="stat-ps">0</div><div class="lbl">PS</div></div>
+    <div class="stat-pill bb"><div class="val" id="stat-bb">0</div><div class="lbl">BB ✓</div></div>
+    <div class="stat-pill cp"><div class="val" id="stat-cp">0</div><div class="lbl">CP ✓</div></div>
+    <div class="stat-pill ps"><div class="val" id="stat-ps">0</div><div class="lbl">PS ✓</div></div>
     <div class="stat-pill wrong"><div class="val" id="stat-wrong">0</div><div class="lbl">Wrong</div></div>
+    <div class="stat-pill mastered"><div class="val" id="stat-mastered">0</div><div class="lbl">⭐ Mastered</div></div>
   </div>
-  <div class="section-pct">
-    <h3>Session Target Distribution</h3>
-    <div class="pct-row"><span class="pct-label" style="color:var(--bb)">BB</span><div class="pct-bar"><div class="pct-fill" id="pct-bb" style="background:var(--bb);width:45%"></div></div><span class="pct-num" id="pct-bb-n">45%</span></div>
-    <div class="pct-row"><span class="pct-label" style="color:var(--cp)">CP</span><div class="pct-bar"><div class="pct-fill" id="pct-cp" style="background:var(--cp);width:36%"></div></div><span class="pct-num" id="pct-cp-n">36%</span></div>
-    <div class="pct-row"><span class="pct-label" style="color:var(--ps)">PS</span><div class="pct-bar"><div class="pct-fill" id="pct-ps" style="background:var(--ps);width:20%"></div></div><span class="pct-num" id="pct-ps-n">20%</span></div>
+
+  <div class="options-panel">
+    <h3>Session Options</h3>
+    <div class="opt-row">
+      <span class="opt-label">SECTIONS</span>
+      <button class="chip on bb" id="chip-BB" onclick="toggleSection('BB')">BB</button>
+      <button class="chip on cp" id="chip-CP" onclick="toggleSection('CP')">CP</button>
+      <button class="chip on ps" id="chip-PS" onclick="toggleSection('PS')">PS</button>
+    </div>
+    <div class="opt-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <span class="opt-label">QUEUE MODE</span>
+      <div class="queue-opts">
+        <div class="qopt active" id="qmode-new" onclick="setQueueMode('new')"><div class="qdot"></div><span class="qopt-text">New cards (in order)</span></div>
+        <div class="qopt" id="qmode-mastered" onclick="setQueueMode('mastered')"><div class="qdot"></div><span class="qopt-text">⭐ Mastered first, then new</span></div>
+        <div class="qopt" id="qmode-wrongonly" onclick="setQueueMode('wrongonly')"><div class="qdot"></div><span class="qopt-text">⚠ Wrong deck only</span></div>
+      </div>
+    </div>
+    <div class="opt-row">
+      <span class="opt-label">ORDER</span>
+      <button class="chip on y" id="chip-ordered" onclick="toggleOrder()">IN ORDER</button>
+      <span style="font-size:11px;color:var(--text3)" id="order-desc">Sequential by ID</span>
+    </div>
+    <div class="opt-row">
+      <span class="opt-label">RECALL</span>
+      <button class="chip" id="chip-recall" onclick="toggleRecall()">OFF</button>
+      <span style="font-size:11px;color:var(--text3)">Hide choices until revealed</span>
+    </div>
   </div>
-  <div class="mode-toggle">
-    <button class="mode-btn active" id="mode-normal" onclick="setMode('normal')">NORMAL</button>
-    <button class="mode-btn" id="mode-recall" onclick="setMode('recall')">RECALL</button>
-    <button class="mode-btn" id="mode-wrong" onclick="setMode('wrongdeck')">WRONG DECK</button>
-  </div>
-  <div class="home-btns">
+
+  <div style="width:100%;display:flex;flex-direction:column;gap:8px">
     <button class="btn btn-primary" onclick="startSession()">▶ START 2-HOUR SESSION</button>
-    <button class="btn btn-secondary" onclick="showScreen('wrong-screen')">⚠ Review Wrong Deck (<span id="wrong-count-btn">0</span>)</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" style="flex:1" onclick="showScreen('wrong-screen')">⚠ Wrong (<span id="wrong-count-btn">0</span>)</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="showScreen('mastered-screen')">⭐ Mastered (<span id="mastered-count-btn">0</span>)</button>
+    </div>
     <button class="btn btn-secondary" onclick="showScreen('add-screen')">＋ Add AAMC / Section Bank Q</button>
+  </div>
   </div>
 </div>
 
 <!-- SESSION SCREEN -->
 <div id="session-screen" class="screen hidden">
+  <div class="paused-banner">⏸ SESSION PAUSED — Press ▶ to continue</div>
   <div class="session-header">
     <div class="session-timer" id="timer">2:00:00</div>
     <div class="session-progress">
@@ -233,6 +304,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
     <span class="section-badge" id="curr-badge">BB</span>
     <span class="code-tag" id="curr-code">1A</span>
+    <button class="btn btn-sm btn-pause" id="pause-btn" onclick="togglePause()">⏸</button>
     <button class="btn btn-sm btn-secondary" onclick="endSession()">END</button>
   </div>
   <div class="session-body" id="session-body">
@@ -245,6 +317,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
     <div class="footer-right">
       <button class="btn btn-sm btn-secondary" id="flag-btn" onclick="flagQuestion()">⚑ Flag</button>
+      <button class="mnemonic-btn" id="mnem-footer-btn" onclick="openMnemonicEditor(state.currentQ?.id)" title="Add mnemonic">🧠</button>
       <button class="btn btn-sm btn-primary" id="next-btn" onclick="nextQuestion()" style="display:none">NEXT →</button>
     </div>
   </div>
@@ -387,6 +460,21 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <button class="btn btn-secondary" onclick="requeueWrong()">↩ Re-queue Wrong Deck</button>
     <button class="btn btn-secondary" onclick="showScreen('wrong-screen')">⚠ Review Wrong Deck</button>
     <button class="btn btn-secondary" onclick="showScreen('home-screen')">⌂ Home</button>
+  </div>
+</div>
+
+
+<!-- MASTERED DECK SCREEN -->
+<div id="mastered-screen" class="screen hidden">
+  <div class="mastered-header">
+    <button class="btn btn-sm btn-secondary" onclick="showScreen('home-screen')">← Back</button>
+    <h2>⭐ MASTERED DECK</h2>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--text3)" id="mastered-total-label">0 questions</span>
+    <div style="flex:1"></div>
+    <button class="btn btn-sm btn-secondary" onclick="startMasteredSession()">Practice →</button>
+  </div>
+  <div class="wrong-list" id="mastered-list">
+    <div class="empty-state"><h3>Nothing mastered yet ⭐</h3><p>Answer a Wrong Deck question right on first retry.<br>It moves here automatically.</p></div>
   </div>
 </div>
 
@@ -726,37 +814,59 @@ QUESTIONS.forEach(q => { CODE_SECTION[q.code] = q.section; });
 
 // ===== STATE =====
 let state = {
-  mode: 'normal',          // 'normal' | 'recall' | 'wrongdeck'
+  mode: 'normal',
   sessionActive: false,
-  sessionElapsed: 0,       // seconds into session
+  paused: false,
+  sessionElapsed: 0,
   breakActive: false,
   breakElapsed: 0,
   timerInterval: null,
-  sessionQueue: [],        // shuffled queue for this session
+  sessionQueue: [],
   currentQIndex: 0,
   currentQ: null,
   answered: false,
-  recallRevealed: false,   // choices shown in recall mode
+  recallRevealed: false,
   sessionAnswered: 0,
   sessionCorrect: 0,
-  sessionWrong: [],        // ids wrong this session
+  sessionWrong: [],
   sectionCounts: {BB:0, CP:0, PS:0},
   sectionCorrect: {BB:0, CP:0, PS:0},
   streak: 0,
   selectedAnswer: null,
-  wrongDeck: [],           // [{q, wrongCount, source}]
+  wrongDeck: [],
+  masteredDeck: [],
+  mnemonics: {},
   totalAnswered: {BB:0, CP:0, PS:0},
   totalCorrect: {BB:0, CP:0, PS:0},
   addAnswerSelected: null,
   flaggedIds: new Set(),
-  requeueMode: false,      // session from wrong deck requeue
+  requeueMode: false,
+  queueMode: 'new',
+  orderedMode: true,
+  recallMode: false,
+  activeSections: {BB:true, CP:true, PS:true},
 };
 
 // ===== PERSISTENCE =====
 function saveState() {
   try {
     localStorage.setItem('mcat_wrong', JSON.stringify(state.wrongDeck));
+    localStorage.setItem('mcat_mastered', JSON.stringify(state.masteredDeck));
     localStorage.setItem('mcat_totals', JSON.stringify({a: state.totalAnswered, c: state.totalCorrect}));
+    // Save mnemonics but skip huge image data inline to avoid quota - store separately
+    const mnNoImg = {};
+    Object.entries(state.mnemonics).forEach(([k,v]) => { mnNoImg[k] = {text: v.text}; });
+    localStorage.setItem('mcat_mnemonics', JSON.stringify(mnNoImg));
+    // Images stored separately per key
+    Object.entries(state.mnemonics).forEach(([k,v]) => {
+      if (v.imageDataUrl) {
+        try { localStorage.setItem('mcat_img_'+k, v.imageDataUrl); } catch(e) {}
+      }
+    });
+    localStorage.setItem('mcat_prefs', JSON.stringify({
+      queueMode: state.queueMode, orderedMode: state.orderedMode,
+      recallMode: state.recallMode, activeSections: state.activeSections
+    }));
   } catch(e) {}
 }
 
@@ -764,11 +874,26 @@ function loadState() {
   try {
     const w = localStorage.getItem('mcat_wrong');
     if (w) state.wrongDeck = JSON.parse(w);
+    const m = localStorage.getItem('mcat_mastered');
+    if (m) state.masteredDeck = JSON.parse(m);
     const t = localStorage.getItem('mcat_totals');
-    if (t) {
-      const p = JSON.parse(t);
-      state.totalAnswered = p.a || {BB:0,CP:0,PS:0};
-      state.totalCorrect = p.c || {BB:0,CP:0,PS:0};
+    if (t) { const p=JSON.parse(t); state.totalAnswered=p.a||{BB:0,CP:0,PS:0}; state.totalCorrect=p.c||{BB:0,CP:0,PS:0}; }
+    const mn = localStorage.getItem('mcat_mnemonics');
+    if (mn) {
+      state.mnemonics = JSON.parse(mn);
+      // Re-attach image data
+      Object.keys(state.mnemonics).forEach(k => {
+        const img = localStorage.getItem('mcat_img_'+k);
+        if (img) state.mnemonics[k].imageDataUrl = img;
+      });
+    }
+    const pr = localStorage.getItem('mcat_prefs');
+    if (pr) {
+      const p = JSON.parse(pr);
+      if (p.queueMode) state.queueMode = p.queueMode;
+      if (p.orderedMode !== undefined) state.orderedMode = p.orderedMode;
+      if (p.recallMode !== undefined) state.recallMode = p.recallMode;
+      if (p.activeSections) state.activeSections = p.activeSections;
     }
   } catch(e) {}
 }
@@ -787,6 +912,11 @@ function updateHome() {
   document.getElementById('stat-ps').textContent = state.totalAnswered.PS || 0;
   document.getElementById('stat-wrong').textContent = state.wrongDeck.length;
   document.getElementById('wrong-count-btn').textContent = state.wrongDeck.length;
+  const mCount = state.masteredDeck.length;
+  const mEl = document.getElementById('stat-mastered');
+  if (mEl) mEl.textContent = mCount;
+  const mcBtn = document.getElementById('mastered-count-btn');
+  if (mcBtn) mcBtn.textContent = mCount;
   
   // Distribution %
   const bbPct = 45, cpPct = 36, psPct = 19;
@@ -810,42 +940,60 @@ function setMode(m) {
 
 // ===== SESSION BUILD =====
 function buildSessionQueue() {
-  if (state.requeueMode || state.mode === 'wrongdeck') {
-    if (state.wrongDeck.length === 0) {
-      showNotification('No questions in Wrong Deck!');
-      return false;
-    }
-    // Build from wrong deck, shuffle
-    state.sessionQueue = shuffleArray([...state.wrongDeck.map(w => w.q)]);
+  if (state.requeueMode) {
+    if (state.wrongDeck.length === 0) { showNotification('Wrong Deck is empty!'); return false; }
+    const pool = state.wrongDeck.map(w => w.q);
+    state.sessionQueue = state.orderedMode ? [...pool] : shuffleArray([...pool]);
     state.requeueMode = false;
     return true;
   }
 
-  // Normal session: proportional distribution across BB, CP, PS
-  // BB: 45.5%, CP: 35.8%, PS: 20.3% — based on bank counts 141/111/63
-  const bankBB = QUESTIONS.filter(q=>q.section==='BB');
-  const bankCP = QUESTIONS.filter(q=>q.section==='CP');
-  const bankPS = QUESTIONS.filter(q=>q.section==='PS');
+  if (state.queueMode === 'wrongonly') {
+    if (state.wrongDeck.length === 0) { showNotification('No questions in Wrong Deck!'); return false; }
+    const pool = state.wrongDeck.map(w => w.q);
+    state.sessionQueue = state.orderedMode ? [...pool] : shuffleArray([...pool]);
+    return true;
+  }
 
-  // Also include user-added questions
-  const userAdded = state.wrongDeck.filter(w => w.source !== 'session').map(w => w.q);
-  const allPool = [...QUESTIONS, ...userAdded];
-  
-  const shuffledBB = shuffleArray(bankBB);
-  const shuffledCP = shuffleArray(bankCP);
-  const shuffledPS = shuffleArray(bankPS);
+  const activeSecs = Object.entries(state.activeSections).filter(([k,v])=>v).map(([k])=>k);
+  if (activeSecs.length === 0) { showNotification('Select at least one section!'); return false; }
 
-  // Interleave proportionally: for every 10 questions: ~5 BB, ~3 CP, ~2 PS
+  let pool = QUESTIONS.filter(q => activeSecs.includes(q.section));
+
+  if (state.queueMode === 'mastered') {
+    const masteredIds = new Set(state.masteredDeck.map(m=>m.q.id));
+    const mastered = pool.filter(q => masteredIds.has(q.id));
+    const fresh = pool.filter(q => !masteredIds.has(q.id));
+    const mList = state.orderedMode ? [...mastered].sort((a,b)=>a.id.localeCompare(b.id)) : shuffleArray([...mastered]);
+    const fList = state.orderedMode ? [...fresh].sort((a,b)=>a.id.localeCompare(b.id)) : shuffleArray([...fresh]);
+    state.sessionQueue = [...mList, ...fList];
+    return true;
+  }
+
+  // Default: new cards
+  const bySection = {};
+  activeSecs.forEach(s => {
+    let qs = pool.filter(q => q.section === s);
+    bySection[s] = state.orderedMode ? [...qs].sort((a,b)=>a.id.localeCompare(b.id)) : shuffleArray([...qs]);
+  });
+  const weights = {BB:5, CP:3, PS:2};
+  const iters = {BB:0, CP:0, PS:0};
   const queue = [];
-  let bi=0, ci=0, pi=0;
-  while (bi < shuffledBB.length || ci < shuffledCP.length || pi < shuffledPS.length) {
-    for (let i=0; i<5 && bi<shuffledBB.length; i++, bi++) queue.push(shuffledBB[bi]);
-    for (let i=0; i<3 && ci<shuffledCP.length; i++, ci++) queue.push(shuffledCP[ci]);
-    for (let i=0; i<2 && pi<shuffledPS.length; i++, pi++) queue.push(shuffledPS[pi]);
+  let remaining = activeSecs.reduce((sum,s) => sum + (bySection[s]?.length||0), 0);
+  while (remaining > 0) {
+    let moved = 0;
+    activeSecs.forEach(s => {
+      const w = weights[s]||1;
+      for (let i=0; i<w && iters[s]<(bySection[s]?.length||0); i++,iters[s]++,remaining--,moved++) {
+        queue.push(bySection[s][iters[s]]);
+      }
+    });
+    if (moved === 0) break;
   }
   state.sessionQueue = queue;
   return true;
 }
+
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -859,8 +1007,12 @@ function shuffleArray(arr) {
 // ===== START SESSION =====
 function startSession() {
   if (!buildSessionQueue()) return;
-  
+  startSessionFromQueue();
+}
+
+function startSessionFromQueue() {
   state.sessionActive = true;
+  state.paused = false;
   state.sessionElapsed = 0;
   state.breakActive = false;
   state.breakElapsed = 0;
@@ -872,11 +1024,22 @@ function startSession() {
   state.streak = 0;
   state.currentQIndex = 0;
   state.flaggedIds = new Set();
-
+  const btn = document.getElementById('pause-btn');
+  if (btn) { btn.textContent='⏸'; btn.classList.remove('paused'); }
+  document.getElementById('session-screen')?.classList.remove('paused');
   showScreen('session-screen');
   renderCurrentQuestion();
   startTimer();
 }
+
+function startMasteredSession() {
+  if (state.masteredDeck.length === 0) { showNotification('Mastered deck is empty!'); return; }
+  state.sessionQueue = state.orderedMode
+    ? [...state.masteredDeck.map(m=>m.q)].sort((a,b)=>a.id.localeCompare(b.id))
+    : shuffleArray([...state.masteredDeck.map(m=>m.q)]);
+  startSessionFromQueue();
+}
+
 
 // ===== TIMER =====
 function startTimer() {
@@ -885,6 +1048,7 @@ function startTimer() {
 }
 
 function tickTimer() {
+  if (state.paused) return;
   if (state.breakActive) {
     state.breakElapsed++;
     const remaining = BREAK_DURATION - state.breakElapsed;
@@ -908,6 +1072,24 @@ function tickTimer() {
   if (remaining <= 300) timerEl.classList.add('urgent');
   if (remaining <= 0) endSession();
 }
+
+// ===== PAUSE =====
+function togglePause() {
+  if (!state.sessionActive) return;
+  state.paused = !state.paused;
+  const btn = document.getElementById('pause-btn');
+  const screen = document.getElementById('session-screen');
+  if (state.paused) {
+    btn.textContent = '▶';
+    btn.classList.add('paused');
+    screen.classList.add('paused');
+  } else {
+    btn.textContent = '⏸';
+    btn.classList.remove('paused');
+    screen.classList.remove('paused');
+  }
+}
+
 
 function formatTime(secs) {
   if (secs < 0) secs = 0;
@@ -956,7 +1138,7 @@ function renderCurrentQuestion() {
   document.getElementById('curr-code').textContent = q.code || '—';
   document.getElementById('next-btn').style.display = 'none';
   
-  const isRecall = state.mode === 'recall';
+  const isRecall = state.recallMode || state.mode === 'recall';
   const flagged = state.flaggedIds.has(q.id);
   
   let choicesHTML = '';
@@ -998,8 +1180,22 @@ function renderCurrentQuestion() {
       <div class="q-text">${q.q}</div>
       ${choicesHTML}
       <div id="explanation-area"></div>
+      <div id="mnemonic-area"></div>
     </div>
   `;
+  // Show mnemonic if exists
+  const mnem = state.mnemonics[q.id];
+  if (mnem && (mnem.text || mnem.imageDataUrl)) {
+    const mArea = document.getElementById('mnemonic-area');
+    if (mArea) {
+      mArea.innerHTML = `<div class="mnemonic-display">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--purple);margin-bottom:4px">🧠 MNEMONIC</div>
+        ${mnem.text ? `<div>${mnem.text}</div>` : ''}
+        ${mnem.imageDataUrl ? `<img src="${mnem.imageDataUrl}" class="mnemonic-img">` : ''}
+        <button onclick="openMnemonicEditor('${q.id}')" class="mnemonic-btn" style="margin-top:8px;font-size:10px">✏ Edit</button>
+      </div>`;
+    }
+  }
   
   updateSessionStats();
   updateStreakBadge();
@@ -1021,6 +1217,9 @@ function markRecallCorrect() {
   state.totalAnswered[q.section] = (state.totalAnswered[q.section]||0) + 1;
   state.totalCorrect[q.section] = (state.totalCorrect[q.section]||0) + 1;
   state.streak++;
+  // Wrong deck -> mastered promotion
+  const inWrong = state.wrongDeck.findIndex(w => w.q.id === q.id);
+  if (inWrong >= 0) { state.wrongDeck.splice(inWrong, 1); addToMasteredDeck(q); }
   saveState();
   
   document.querySelector('.recall-box').innerHTML = `<div style="color:var(--green);font-family:var(--mono);font-size:13px">✓ CORRECT — ${q.sol || ''}</div>`;
@@ -1072,6 +1271,12 @@ function selectChoice(letter) {
     state.totalCorrect[sec] = (state.totalCorrect[sec]||0) + 1;
     state.streak++;
     document.getElementById('choice-' + letter)?.classList.add('correct');
+    // If this was a wrong-deck question answered correctly on first try -> promote to mastered
+    const inWrong = state.wrongDeck.findIndex(w => w.q.id === q.id);
+    if (inWrong >= 0) {
+      state.wrongDeck.splice(inWrong, 1);
+      addToMasteredDeck(q);
+    }
   } else {
     state.streak = 0;
     document.getElementById('choice-' + letter)?.classList.add('wrong');
@@ -1383,11 +1588,244 @@ document.addEventListener('keydown', (e) => {
   if (key === 'R' && state.mode === 'recall' && !state.answered) revealChoices();
 });
 
+
+// ===== SECTION TOGGLES =====
+function toggleSection(sec) {
+  const on = state.activeSections[sec];
+  const others = Object.entries(state.activeSections).filter(([k,v]) => k !== sec && v).length;
+  if (on && others === 0) { showNotification('Keep at least one section active'); return; }
+  state.activeSections[sec] = !on;
+  const chip = document.getElementById('chip-'+sec);
+  if (!chip) return;
+  const clsMap = {BB:'bb',CP:'cp',PS:'ps'};
+  chip.classList.toggle('on', !on);
+  chip.classList.toggle(clsMap[sec], !on);
+}
+
+// ===== QUEUE MODE =====
+function setQueueMode(mode) {
+  state.queueMode = mode;
+  ['new','mastered','wrongonly'].forEach(m => {
+    document.getElementById('qmode-'+m)?.classList.toggle('active', m === mode);
+  });
+  saveState();
+}
+
+// ===== ORDER TOGGLE =====
+function toggleOrder() {
+  state.orderedMode = !state.orderedMode;
+  const chip = document.getElementById('chip-ordered');
+  const desc = document.getElementById('order-desc');
+  chip.textContent = state.orderedMode ? 'IN ORDER' : 'SHUFFLE';
+  chip.className = 'chip on ' + (state.orderedMode ? 'y' : 'w');
+  if (desc) desc.textContent = state.orderedMode ? 'Sequential by ID' : 'Questions randomized';
+  saveState();
+}
+
+// ===== RECALL TOGGLE =====
+function toggleRecall() {
+  state.recallMode = !state.recallMode;
+  const chip = document.getElementById('chip-recall');
+  chip.textContent = state.recallMode ? 'ON' : 'OFF';
+  chip.className = 'chip' + (state.recallMode ? ' on r' : '');
+  saveState();
+}
+
+// ===== MASTERED DECK =====
+function addToMasteredDeck(q) {
+  if (state.masteredDeck.find(m => m.q.id === q.id)) return;
+  state.masteredDeck.push({ q: {...q}, masteredAt: Date.now() });
+  saveState();
+  updateHome();
+  const n = document.createElement('div');
+  n.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(234,179,8,.2);border:1px solid var(--yellow);border-radius:10px;padding:8px 18px;font-family:var(--mono);font-size:12px;color:var(--yellow);z-index:300;animation:fadeIn .3s';
+  n.textContent = '⭐ MASTERED!';
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 1800);
+}
+
+function removeFromMastered(id) {
+  state.masteredDeck = state.masteredDeck.filter(m => m.q.id !== id);
+  saveState();
+  updateHome();
+  renderMasteredDeck();
+}
+
+function renderMasteredDeck() {
+  const list = document.getElementById('mastered-list');
+  if (!list) return;
+  const el = document.getElementById('mastered-total-label');
+  if (el) el.textContent = state.masteredDeck.length + ' questions';
+  if (state.masteredDeck.length === 0) {
+    list.innerHTML = '<div class="empty-state"><h3>Nothing mastered yet ⭐</h3><p>Answer a Wrong Deck question right on first retry.<br>It moves here automatically.</p></div>';
+    return;
+  }
+  const grouped = {};
+  state.masteredDeck.forEach(m => {
+    const code = m.q.code || 'CUSTOM';
+    if (!grouped[code]) grouped[code] = [];
+    grouped[code].push(m);
+  });
+  const sectionOrder = ['1A','1B','1C','1D','2A','2B','2C','3A','3B','4A','4B','4C','4D','4E','5A','5B','5C','5D','5E','6A','6B','6C','7A','7B','7C','8A','8B','9A','9B','10A','CUSTOM'];
+  list.innerHTML = Object.entries(grouped)
+    .sort((a,b)=>sectionOrder.indexOf(a[0])-sectionOrder.indexOf(b[0]))
+    .map(([code,items])=>`
+      <div class="wrong-group">
+        <div class="wrong-group-header"><span>${code} · ${getCodeName(code)}</span><span>${items.length} q</span></div>
+        ${items.map(m=>`
+          <div class="mastered-item" onclick="reviewWrongItem('${m.q.id}')">
+            <span class="mastered-badge">⭐</span>
+            <div style="flex:1;font-size:13px;color:var(--text2);line-height:1.5">${m.q.q.substring(0,90)}${m.q.q.length>90?'…':''}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+              <span style="font-family:var(--mono);font-size:10px;color:var(--yellow)">${new Date(m.masteredAt).toLocaleDateString()}</span>
+              <button class="demote-btn" onclick="event.stopPropagation();removeFromMastered('${m.q.id}')">↩ Demote</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+}
+
+// ===== MNEMONIC SYSTEM =====
+function openMnemonicEditor(qId) {
+  const existing = state.mnemonics[qId] || {text:'', imageDataUrl:''};
+  const overlay = document.createElement('div');
+  overlay.id = 'mnemonic-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(13,15,20,.94);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px';
+  overlay.onclick = e => { if(e.target===overlay) closeMnemonicOverlay(); };
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid rgba(168,85,247,.3);border-radius:16px;padding:22px;max-width:500px;width:100%;max-height:82vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-family:var(--mono);font-size:13px;color:var(--purple)">🧠 MNEMONIC / NOTE</span>
+        <button onclick="closeMnemonicOverlay()" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 4px">×</button>
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Write a mnemonic, paste or upload an image to anchor this concept.</p>
+      <textarea id="mnem-text" class="mnemonic-edit-area" placeholder="e.g. OIL RIG = Oxidation Is Loss, Reduction Is Gain">${existing.text}</textarea>
+      <div style="margin-top:10px">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)">IMAGE (paste Ctrl+V, upload, or drag & drop)</div>
+        <div class="img-drop" id="img-drop-zone"
+             onclick="document.getElementById('mnem-file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('dragover')"
+             ondragleave="this.classList.remove('dragover')"
+             ondrop="handleMnemDrop(event)"
+             data-img="${existing.imageDataUrl ? 'has' : ''}">
+          ${existing.imageDataUrl
+            ? `<img src="${existing.imageDataUrl}" style="max-width:100%;max-height:150px;border-radius:6px;display:block;margin:0 auto" id="mnem-img-preview">`
+            : '<p>📎 Click, paste, or drag an image here</p>'}
+        </div>
+        <input type="file" id="mnem-file-input" accept="image/*" style="display:none" onchange="handleMnemFile(event)">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="saveMnemonic('${qId}')" class="btn btn-primary" style="flex:1">💾 Save</button>
+        ${existing.text||existing.imageDataUrl ? `<button onclick="deleteMnemonic('${qId}')" class="btn btn-danger btn-sm">Delete</button>` : ''}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  window._mnemCurrentId = qId;
+  window._mnemPasteHandler = function(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const reader = new FileReader();
+        reader.onload = ev => setMnemImage(ev.target.result);
+        reader.readAsDataURL(item.getAsFile());
+        break;
+      }
+    }
+  };
+  document.addEventListener('paste', window._mnemPasteHandler);
+}
+
+function closeMnemonicOverlay() {
+  document.getElementById('mnemonic-overlay')?.remove();
+  if (window._mnemPasteHandler) document.removeEventListener('paste', window._mnemPasteHandler);
+}
+
+function setMnemImage(dataUrl) {
+  const zone = document.getElementById('img-drop-zone');
+  if (!zone) return;
+  zone.innerHTML = `<img src="${dataUrl}" style="max-width:100%;max-height:150px;border-radius:6px;display:block;margin:0 auto" id="mnem-img-preview">`;
+  zone.dataset.imgData = dataUrl;
+}
+
+function handleMnemFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => setMnemImage(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+function handleMnemDrop(event) {
+  event.preventDefault();
+  document.getElementById('img-drop-zone')?.classList.remove('dragover');
+  const file = event.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => setMnemImage(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+function saveMnemonic(qId) {
+  const text = document.getElementById('mnem-text')?.value?.trim() || '';
+  const zone = document.getElementById('img-drop-zone');
+  const existing = state.mnemonics[qId]?.imageDataUrl || '';
+  const imgData = zone?.dataset.imgData || existing;
+  if (!text && !imgData) { showNotification('Nothing to save'); return; }
+  state.mnemonics[qId] = { text, imageDataUrl: imgData };
+  saveState();
+  closeMnemonicOverlay();
+  renderCurrentQuestion();
+  showNotification('🧠 Mnemonic saved!');
+}
+
+function deleteMnemonic(qId) {
+  delete state.mnemonics[qId];
+  try { localStorage.removeItem('mcat_img_'+qId); } catch(e) {}
+  saveState();
+  closeMnemonicOverlay();
+  renderCurrentQuestion();
+  showNotification('Mnemonic deleted');
+}
+
 // ===== INIT =====
+function restorePrefsUI() {
+  // Sections
+  ['BB','CP','PS'].forEach(s => {
+    const chip = document.getElementById('chip-'+s);
+    if (!chip) return;
+    const on = state.activeSections[s];
+    const clsMap = {BB:'bb',CP:'cp',PS:'ps'};
+    chip.className = 'chip' + (on ? ' on '+clsMap[s] : '');
+  });
+  // Queue mode
+  setQueueMode(state.queueMode || 'new');
+  // Order
+  const ordChip = document.getElementById('chip-ordered');
+  if (ordChip) {
+    ordChip.textContent = state.orderedMode ? 'IN ORDER' : 'SHUFFLE';
+    ordChip.className = 'chip on ' + (state.orderedMode ? 'y' : 'w');
+  }
+  const desc = document.getElementById('order-desc');
+  if (desc) desc.textContent = state.orderedMode ? 'Sequential by ID' : 'Questions randomized';
+  // Recall
+  const recChip = document.getElementById('chip-recall');
+  if (recChip) {
+    recChip.textContent = state.recallMode ? 'ON' : 'OFF';
+    recChip.className = 'chip' + (state.recallMode ? ' on r' : '');
+  }
+}
+
 function init() {
   loadState();
   updateHome();
   renderWrongDeck();
+  renderMasteredDeck();
+  // Restore UI to loaded prefs
+  restorePrefsUI();
   
   // Hook wrong screen to update when shown
   const observer = new MutationObserver(() => {
