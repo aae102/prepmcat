@@ -2741,9 +2741,9 @@ if (!shouldPreserve) {
           </div>
           <img id="backImg" class="imgLarge" style="display:none" />
           <div class="rating">
-           ${rateBtn("Wrong","add to wrong deck","var(--red)","wrong")}
+${rateBtn("Wrong","add to wrong deck","var(--red)","wrong")}
 ${rateBtn("Correct","move on","var(--green)","correct")}
-${rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true)}
+${st.active?.source !== "requeue" ? rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true) : ''}
           </div>
           <div class="hint" style="text-align:center">Wrong = requeue · Correct = move on · Mastered = mastered deck</div>
         </div>
