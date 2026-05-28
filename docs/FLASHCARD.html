@@ -296,6 +296,7 @@ let CUSTOM_SELECTED = new Set();   // card IDs currently checked
 let CUSTOM_FILTER_DECK   = "all";  // "all" or a deckId
 let CUSTOM_FILTER_STATUS = "all";  // all|unseen|due|mastered|wrong|starred
 let CUSTOM_SHUFFLE       = true;
+let CUSTOM_BLOCK_COUNT   = 4;      // how many blocks to split selected deck into
 
 function loadData(){
   try{
@@ -728,6 +729,47 @@ function getFilteredCustomCards(){
   return result;
 }
 
+  function getDeckCardsInOriginalOrder(deckId){
+  const deck = DATA.decks[deckId];
+  if (!deck) return [];
+
+  return (deck.cards || [])
+    .map(c => normalizeCard({...c}))
+    .sort((a,b)=>
+      (a.createdAtIdx ?? 0) - (b.createdAtIdx ?? 0) ||
+      String(a.id).localeCompare(String(b.id))
+    )
+    .map(c => ({
+      ...c,
+      deckId,
+      deckName: deck.name
+    }));
+}
+
+function getCardBlocks(deckId, blockCount){
+  const cards = getDeckCardsInOriginalOrder(deckId);
+  const total = cards.length;
+  const count = Math.max(1, Number(blockCount || 1));
+  const size = Math.ceil(total / count);
+
+  const blocks = [];
+
+  for (let i = 0; i < count; i++){
+    const start = i * size;
+    const end = Math.min(start + size, total);
+    if (start >= total) break;
+
+    blocks.push({
+      blockNumber: i + 1,
+      startIndex: start,
+      endIndex: end - 1,
+      cards: cards.slice(start, end)
+    });
+  }
+
+  return blocks;
+}
+  
 /******************************************************************
  * IMAGE HELPERS
  ******************************************************************/
@@ -1146,6 +1188,8 @@ function customHTML(){
 
   const allFiltered = getFilteredCustomCards();
   const selCount = CUSTOM_SELECTED.size;
+  const selectedDeck = CUSTOM_FILTER_DECK !== "all" ? DATA.decks[CUSTOM_FILTER_DECK] : null;
+const customBlocks = selectedDeck ? getCardBlocks(CUSTOM_FILTER_DECK, CUSTOM_BLOCK_COUNT) : [];
 
   // Group filtered cards by deck for display
   const byDeck = {};
@@ -1225,6 +1269,43 @@ function customHTML(){
             ${decks.map(([id,d])=>`<option value="${id}" ${CUSTOM_FILTER_DECK===id?'selected':''}>${escapeHTML(d.name)}</option>`).join('')}
           </select>
         </div>
+        <div class="customFilterGroup" style="min-width:260px">
+  <div class="customFilterLabel">Split Into Blocks</div>
+
+  ${selectedDeck ? `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input
+        class="input"
+        id="customBlockCount"
+        type="number"
+        min="1"
+        max="50"
+        value="${CUSTOM_BLOCK_COUNT}"
+        style="width:90px;padding:8px 12px;font-size:13px"
+      />
+
+      <span class="tiny" style="color:var(--muted)">
+        ${selectedDeck.cards?.length || 0} cards total
+      </span>
+    </div>
+
+    <div class="pillRow" style="margin-top:8px">
+      ${customBlocks.map(b => `
+        <button class="pill" data-study-block="${b.blockNumber}">
+          Block ${b.blockNumber}: ${b.startIndex + 1}-${b.endIndex + 1}
+        </button>
+      `).join("")}
+    </div>
+
+    <div class="note">
+      Pick a block to auto-select that card range.
+    </div>
+  ` : `
+    <div class="note">
+      Choose one deck first, then split it into blocks.
+    </div>
+  `}
+</div>
         <div class="customFilterGroup">
           <div class="customFilterLabel">Status</div>
           <div class="pillRow">
@@ -1274,6 +1355,39 @@ function bindCustom(){
   // Deck filter
   const deckSel = document.getElementById("customDeckFilter");
   if (deckSel) deckSel.onchange = ()=>{ CUSTOM_FILTER_DECK = deckSel.value; render(); };
+  // Split into blocks
+const blockCountInput = document.getElementById("customBlockCount");
+if (blockCountInput){
+  blockCountInput.onchange = ()=>{
+    CUSTOM_BLOCK_COUNT = Math.max(1, Number(blockCountInput.value || 1));
+    render();
+  };
+}
+
+document.querySelectorAll("[data-study-block]").forEach(btn=>{
+  btn.onclick = ()=>{
+    if (CUSTOM_FILTER_DECK === "all"){
+      alert("Choose one deck first.");
+      return;
+    }
+
+    const blockNumber = Number(btn.dataset.studyBlock);
+    const block = getCardBlocks(CUSTOM_FILTER_DECK, CUSTOM_BLOCK_COUNT)
+      .find(b => b.blockNumber === blockNumber);
+
+    if (!block || !block.cards.length){
+      alert("No cards in this block.");
+      return;
+    }
+
+    CUSTOM_SELECTED.clear();
+    block.cards.forEach(c => CUSTOM_SELECTED.add(c.id));
+
+    CUSTOM_SHUFFLE = false;
+
+    render();
+  };
+});
 
   // Status pills
   document.querySelectorAll("[data-status]").forEach(btn=>{
