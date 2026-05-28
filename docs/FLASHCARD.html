@@ -282,8 +282,9 @@ const INIT = {
     dailyGoal: DEFAULT_DAILY_GOAL,
     studyMode: "mixed_random",
     strictness: "balanced",
-    masteredReviewPerDay: 15,
-    masteredHandling: "mix"
+  masteredReviewPerDay: 15,
+masteredHandling: "mix",
+wrongHandling: "front",
   }
 };
 
@@ -377,6 +378,7 @@ function normalizeData(d){
   if (!d.settings.strictness) d.settings.strictness = "balanced";
   if (d.settings.masteredReviewPerDay == null) d.settings.masteredReviewPerDay = 15;
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
+  if (!d.settings.wrongHandling) d.settings.wrongHandling = "front";
   if (!d.decks) d.decks = {};
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
@@ -689,23 +691,43 @@ function buildDailyQueue(decks, limit){
   }
 
   const unseenQueue = interleaveBuckets(slicedByDeck);
-  const masteredHandling = DATA.settings?.masteredHandling || "mix";
-  let tail;
-  if (masteredHandling === "mute"){
-    tail = unseenQueue;
-  } else if (masteredHandling === "front"){
-    tail = [...masteredQueue, ...unseenQueue];
-  } else {
-    tail = shuffle([...masteredQueue, ...unseenQueue]);
-  }
 
-  return {
-    wrongQueue, dueQueue, masteredQueue, unseenQueue,
-    perDeckNewSlots: Object.fromEntries(
-      Object.entries(slicedByDeck).map(([id,arr])=>[id,arr.length])
-    ),
-    queue: [...wrongQueue, ...dueQueue, ...tail]
-  };
+const masteredHandling = DATA.settings?.masteredHandling || "mix";
+const wrongHandling = DATA.settings?.wrongHandling || "front";
+
+let masteredTail;
+if (masteredHandling === "mute"){
+  masteredTail = [];
+} else if (masteredHandling === "front"){
+  masteredTail = masteredQueue;
+} else {
+  masteredTail = masteredQueue;
+}
+
+let queue;
+if (wrongHandling === "mix_mastered"){
+  queue = [
+    ...shuffle([...wrongQueue, ...masteredTail]),
+    ...dueQueue,
+    ...unseenQueue
+  ];
+} else {
+  queue = [
+    ...wrongQueue,
+    ...dueQueue,
+    ...(masteredHandling === "front" ? masteredTail : []),
+    ...unseenQueue,
+    ...(masteredHandling === "mix" ? shuffle(masteredTail) : [])
+  ];
+}
+
+return {
+  wrongQueue, dueQueue, masteredQueue, unseenQueue,
+  perDeckNewSlots: Object.fromEntries(
+    Object.entries(slicedByDeck).map(([id,arr])=>[id,arr.length])
+  ),
+  queue
+};
 }
 
 /******************************************************************
@@ -932,19 +954,37 @@ function sidebarHTML(){
         <input class="input" id="goalInput" type="number" style="padding:6px 8px;font-size:13px" value="${getDailyGoal()}" min="10" max="9999" />
         <button class="btnSmall" id="saveGoal">Set</button>
       </div>
-      <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-top:6px">Mastered Review/day</div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-top:6px">
-  Mastered cards
+      <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-top:6px">
+  Mastered Review/day
 </div>
-<select id="masteredHandlingSel" class="btnSmall" style="background:var(--panel);width:100%">
-  <option value="mix">Mix with New</option>
-  <option value="front">Do Mastered First</option>
-  <option value="mute">Mute Mastered</option>
-</select>
-        <input class="input" id="masteredGoalInput" type="number" style="padding:6px 8px;font-size:13px" value="${getMasteredReviewPerDay()}" min="0" max="200" />
-        <button class="btnSmall" id="saveMasteredGoal">Set</button>
-      </div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+
+  <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-top:6px">
+    Mastered Cards
+  </div>
+
+  <select id="masteredHandlingSel" class="btnSmall" style="background:var(--panel);width:100%">
+    <option value="mix">Mix with New</option>
+    <option value="front">Do Mastered First</option>
+    <option value="mute">Mute Mastered</option>
+  </select>
+
+  <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-top:6px">
+    Wrong Cards
+  </div>
+
+  <select id="wrongHandlingSel" class="btnSmall" style="background:var(--panel);width:100%">
+    <option value="front">Wrong First</option>
+    <option value="mix_mastered">Mix Wrong + Mastered</option>
+  </select>
+
+  <div style="display:flex;gap:6px;align-items:center;width:100%">
+    <input class="input" id="masteredGoalInput" type="number" style="padding:6px 8px;font-size:13px;min-width:0;flex:1" value="${getMasteredReviewPerDay()}" min="0" max="200" />
+    <button class="btnSmall" id="saveMasteredGoal" style="flex-shrink:0">Set</button>
+  </div>
+
+</div>
       <button class="btnSmall btnDanger" id="resetAllBtn" style="margin-top:8px">⚠ Reset All</button>
       <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px">
         <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Backup</div>
@@ -2701,10 +2741,11 @@ if (!shouldPreserve) {
           </div>
           <img id="backImg" class="imgLarge" style="display:none" />
           <div class="rating">
-            ${rateBtn("Again","~1m","var(--red)","again")}
-            ${rateBtn("Mastered","retire","var(--purple)","mastered",true)}
+           ${rateBtn("Wrong","add to wrong deck","var(--red)","wrong")}
+${rateBtn("Correct","move on","var(--green)","correct")}
+${rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true)}
           </div>
-          <div class="hint" style="text-align:center">Again/Hard repeat soon · wrong-deck requeue until Mastered</div>
+          <div class="hint" style="text-align:center">Wrong = requeue · Correct = move on · Mastered = mastered deck</div>
         </div>
 
  <!-- edit panel -->
@@ -3254,78 +3295,25 @@ if (saveEditBtn) saveEditBtn.onclick = ()=>{
     refresh();
   }
 
-  function rateWithLabel(label, quality){
-    const card = currentCard();
-    if (!card) return;
+function rateWithLabel(label, quality){
+  const card = currentCard();
+  if (!card) return;
 
-    if (label === "again"){
-      const current = DATA.decks[card.deckId]?.cards?.find(c => c.id === card.id) || card;
+  const current = DATA.decks[card.deckId]?.cards?.find(c => c.id === card.id) || card;
 
-      const newCard = {
-        ...current,
-        seenCount: (current.seenCount || 0) + 1,
-        lastSeenOn: todayStr(),
-        wrongCount: (current.wrongCount || 0) + 1,
-        inWrongDeck: true,
-        mastered: false,
-        adaptiveMode: ((current.wrongCount || 0) + 1) >= (current.adaptiveThreshold ?? 3)
-          ? decideAdaptiveMode({ ...current, wrongCount: (current.wrongCount || 0) + 1 })
-          : "typed"
-      };
+  const pressedWrong = label === "wrong";
+  const pressedCorrect = label === "correct";
+  const pressedMastered = label === "mastered";
 
-      const dk = DATA.decks[card.deckId];
-      const ci = dk?.cards?.findIndex(c => c.id === card.id);
-      if (ci >= 0) dk.cards[ci] = newCard;
+  let newCard;
 
-      const t = st.today;
-      if (!DATA.stats[t]) DATA.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
-      DATA.stats[t].reviewed += 1;
-      DATA.stats[t].wrong += 1;
-
-      saveData(DATA);
-
-      st.sess.total += 1;
-      st.sess.wrong += 1;
-      st.sess.requeues += 1;
-
-      st.input = "";
-      st.result = null;
-      st.mc = null;
-      st.mcPicked = null;
-      st.phase = "question";
-      st.revealedBySpace = false;
-      st.active = {
-        card: { ...newCard, deckId: card.deckId },
-        source: st.active?.source || "primary",
-        learningIndex: -1
-      };
-      st.justAdvanced = true;
-
-      refresh();
-      return;
-    }
-
-    const ok = quality >= 3;
-    const newCard = sm2(card, quality);
-    newCard.seenCount = (card.seenCount || 0) + 1;
+  if (pressedWrong){
+    newCard = sm2(current, 0);
+    newCard.seenCount = (current.seenCount || 0) + 1;
     newCard.lastSeenOn = todayStr();
-
-    const wasWrong = (st.result === "wrong");
-    if (wasWrong || label === "hard"){
-      newCard.wrongCount = (card.wrongCount || 0) + 1;
-    } else if (quality >= 4){
-      newCard.wrongCount = 0;
-    } else {
-      newCard.wrongCount = card.wrongCount || 0;
-    }
-
-    if (card.mastered && label === "hard"){
-      newCard.mastered = false;
-      newCard.inWrongDeck = true;
-    } else if (label === "mastered"){
-      newCard.inWrongDeck = false;
-      newCard.mastered = true;
-    }
+    newCard.wrongCount = (current.wrongCount || 0) + 1;
+    newCard.inWrongDeck = true;
+    newCard.mastered = false;
 
     const threshold = newCard.adaptiveThreshold ?? 3;
     newCard.adaptiveMode =
@@ -3339,48 +3327,87 @@ if (saveEditBtn) saveEditBtn.onclick = ()=>{
       const t = st.today;
       if (!d.stats[t]) d.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
       d.stats[t].reviewed += 1;
-      if (ok) d.stats[t].correct += 1;
-      else d.stats[t].wrong += 1;
+      d.stats[t].wrong += 1;
     });
 
     st.sess.total += 1;
-    st.sess.correct += ok ? 1 : 0;
-    st.sess.wrong += ok ? 0 : 1;
+    st.sess.wrong += 1;
+    st.sess.requeues += 1;
 
-    if (st.isCustomMode){
-      if (label === "hard"){
-        st.sess.requeues += 1;
-        st.requeue.push({ ...newCard, deckId: card.deckId });
-      }
-    } else {
-      if (label === "hard" && !st.isRequeue){
-        st.learning.push({
-          card: { ...newCard, deckId: card.deckId },
-          dueAfterTotal: st.sess.total + 3
-        });
-      }
+    // IMPORTANT: do NOT advance.
+    // Stay on this same card until Correct or Mastered.
+    st.input = "";
+    st.result = null;
+    st.mc = null;
+    st.mcPicked = null;
+    st.phase = "question";
+    st.revealedBySpace = false;
+    st.active = {
+      card: { ...newCard, deckId: card.deckId },
+      source: st.active?.source || "primary",
+      learningIndex: -1
+    };
 
-      if (newCard.inWrongDeck && label !== "mastered"){
-        st.sess.requeues += 1;
-        if (st.isRequeue && st.reqIdx < st.requeue.length){
-          st.requeue.splice(st.reqIdx, 1);
-        } else {
-          st.requeue = st.requeue.filter(c => c.id !== newCard.id);
-        }
-        st.requeue.push({ ...newCard, deckId: card.deckId });
-      }
-    }
-
-    if (st.active?.source === "learning" && st.active.learningIndex >= 0){
-      st.learning.splice(st.active.learningIndex, 1);
-    }
-
-    if (st.isRequeue && (label === "good" || label === "easy" || label === "mastered")){
-      st.reqIdx++;
-    }
-
-    advance();
+    refresh();
+    return;
   }
+
+  if (pressedMastered){
+    newCard = sm2(current, 5);
+    newCard.seenCount = (current.seenCount || 0) + 1;
+    newCard.lastSeenOn = todayStr();
+    newCard.inWrongDeck = false;
+    newCard.mastered = true;
+    newCard.adaptiveMode = "typed";
+  }
+
+  else if (pressedCorrect){
+    newCard = sm2(current, 3);
+    newCard.seenCount = (current.seenCount || 0) + 1;
+    newCard.lastSeenOn = todayStr();
+
+    // Correct moves on, but if it was in wrong deck, it stays there.
+    // Only Mastered removes it from wrong deck.
+    newCard.wrongCount = current.wrongCount || 0;
+    newCard.inWrongDeck = current.inWrongDeck || false;
+    newCard.mastered = false;
+
+    const threshold = newCard.adaptiveThreshold ?? 3;
+    newCard.adaptiveMode =
+      ((newCard.wrongCount || 0) >= threshold) ? decideAdaptiveMode(newCard) : "typed";
+  }
+
+  else {
+    return;
+  }
+
+  updateData(d => {
+    const dk = d.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(c => c.id === card.id);
+    if (ci >= 0) dk.cards[ci] = newCard;
+
+    const t = st.today;
+    if (!d.stats[t]) d.stats[t] = { reviewed: 0, correct: 0, wrong: 0 };
+    d.stats[t].reviewed += 1;
+    d.stats[t].correct += 1;
+  });
+
+  st.sess.total += 1;
+  st.sess.correct += 1;
+
+  // remove from same-session requeue if it exists
+  st.requeue = st.requeue.filter(c => c.id !== newCard.id);
+
+  if (st.active?.source === "learning" && st.active.learningIndex >= 0){
+    st.learning.splice(st.active.learningIndex, 1);
+  }
+
+  if (st.isRequeue){
+    st.reqIdx++;
+  }
+
+  advance();
+}
 
   checkBtn.onclick = doCheckTyped;
   if (revealBtn) revealBtn.onclick = revealAnswerNeutral;
@@ -3391,15 +3418,13 @@ if (saveEditBtn) saveEditBtn.onclick = ()=>{
   };
 
   document.querySelectorAll("[data-rate]").forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = btn.dataset.rate;
-      if (id === "again") rateWithLabel("again", 0);
-      if (id === "hard") rateWithLabel("hard", 1);
-      if (id === "good") rateWithLabel("good", 3);
-      if (id === "easy") rateWithLabel("easy", 4);
-      if (id === "mastered") rateWithLabel("mastered", 5);
-    };
-  });
+  btn.onclick = ()=>{
+    const id = btn.dataset.rate;
+    if (id === "wrong") rateWithLabel("wrong", 0);
+    if (id === "correct") rateWithLabel("correct", 3);
+    if (id === "mastered") rateWithLabel("mastered", 5);
+  };
+});
 
   window.__studyKeyHandler = (e)=>{
     if (SCREEN !== "study") return;
@@ -3438,11 +3463,12 @@ if (saveEditBtn) saveEditBtn.onclick = ()=>{
       if (st.phase === "question") revealAnswerNeutral();
       return;
     }
-
-    if (st.phase === "revealed"){
-      if (e.key === "1") { e.preventDefault(); rateWithLabel("again", 0); return; }
-      if (e.key === "5") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
-    }
+    
+     if (st.phase === "revealed"){
+  if (e.key === "1") { e.preventDefault(); rateWithLabel("wrong", 0); return; }
+  if (e.key === "2") { e.preventDefault(); rateWithLabel("correct", 3); return; }
+  if (e.key === "3") { e.preventDefault(); rateWithLabel("mastered", 5); return; }
+}
   };
 
   window.addEventListener("keydown", window.__studyKeyHandler);
@@ -3592,6 +3618,13 @@ if (modeSel) modeSel.onchange = ()=>{
       d.settings.masteredHandling = masteredHandlingSel.value;
     });
   }
+  const wrongHandlingSel = document.getElementById("wrongHandlingSel");
+if (wrongHandlingSel){
+  wrongHandlingSel.value = DATA.settings?.wrongHandling || "front";
+  wrongHandlingSel.onchange = ()=> updateData(d=>{
+    d.settings.wrongHandling = wrongHandlingSel.value;
+  });
+}
 }
 
 setInterval(handleDayRollover, 30000);
