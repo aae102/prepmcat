@@ -2743,7 +2743,7 @@ if (!shouldPreserve) {
           <div class="rating">
 ${rateBtn("Wrong","add to wrong deck","var(--red)","wrong")}
 ${rateBtn("Correct","move on","var(--green)","correct")}
-${st.active?.source !== "requeue" ? rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true) : ''}
+${(!st || !st.active || st.active.source !== "requeue") ? rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true) : ''}
           </div>
           <div class="hint" style="text-align:center">Wrong = requeue · Correct = move on · Mastered = mastered deck</div>
         </div>
