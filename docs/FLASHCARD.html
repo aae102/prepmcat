@@ -2727,7 +2727,7 @@ if (!shouldPreserve) {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
             <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btnOutline" id="revealBtn">Reveal / Flip</button>
+              <button class="btnOutline" id="revealBtn">Reveal / Flip</button> <button class="btnOutline" id="skipBtn" style="color:var(--orange);border-color:rgba(251,146,60,.35)">Skip →</button>
               <button class="btnPrimary" id="checkBtn">Check →</button>
             </div>
           </div>
@@ -3415,12 +3415,25 @@ function rateWithLabel(label, quality){
 
   checkBtn.onclick = doCheckTyped;
   if (revealBtn) revealBtn.onclick = revealAnswerNeutral;
-
+const skipBtn = document.getElementById("skipBtn");
+if (skipBtn) skipBtn.onclick = ()=>{
+  if (st.phase !== "question") return;
+  const card = currentCard();
+  if (card) st.requeue.push({...card});
+  st.skipCount = (st.skipCount || 0) + 1;
+  advance();
+};
   ansInput.oninput = (e)=>{ st.input = e.target.value; };
-  ansInput.onkeydown = (e)=>{
-    if (e.key === "Enter") doCheckTyped();
-  };
-
+ ansInput.onkeydown = (e)=>{
+  if (e.key === "Enter") doCheckTyped();
+  if (e.code === "Space" && ansInput.value === "") {
+    e.preventDefault();
+    const card = currentCard();
+    if (card) st.requeue.push({...card});
+    st.skipCount = (st.skipCount || 0) + 1;
+    advance();
+  }
+};
   document.querySelectorAll("[data-rate]").forEach(btn=>{
   btn.onclick = ()=>{
     const id = btn.dataset.rate;
@@ -3463,10 +3476,15 @@ function rateWithLabel(label, quality){
     }
 
     if (e.code === "Space"){
-      e.preventDefault();
-      if (st.phase === "question") revealAnswerNeutral();
-      return;
-    }
+  e.preventDefault();
+  if (st.phase === "question"){
+    const card = currentCard();
+    if (card) st.requeue.push({...card});
+    st.skipCount = (st.skipCount || 0) + 1;
+    advance();
+  }
+  return;
+}
     
      if (st.phase === "revealed"){
   if (e.key === "1") { e.preventDefault(); rateWithLabel("wrong", 0); return; }
