@@ -2727,7 +2727,9 @@ if (!shouldPreserve) {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap">
             <span class="hint">Enter=check · Space=reveal · 1-5=rate · S=star</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btnOutline" id="revealBtn">Reveal / Flip</button> <button class="btnOutline" id="skipBtn" style="color:var(--orange);border-color:rgba(251,146,60,.35)">Skip →</button>
+              <button class="btnOutline" id="prevBtn" style="color:var(--muted)">← Prev</button>
+<button class="btnOutline" id="revealBtn">Reveal / Flip</button>
+<button class="btnOutline" id="skipBtn" style="color:var(--orange);border-color:rgba(251,146,60,.35)">Skip →</button>
               <button class="btnPrimary" id="checkBtn">Check →</button>
             </div>
           </div>
@@ -3140,17 +3142,21 @@ if (saveEditBtn) saveEditBtn.onclick = ()=>{
       seenBadge.textContent = `Seen ×${card.seenCount||0}`;
     }
 
-    if (starBtn){
-      starBtn.textContent = card.starred ? "★ Unstar" : "★ Star";
-      starBtn.onclick = ()=>{
-        updateData(d=>{
-          const c = d.decks[card.deckId]?.cards?.find(x=>x.id===card.id);
-          if (c) c.starred = !c.starred;
-        });
-        st.sess.starred += 1;
-        refresh();
-      };
-    }
+if (starBtn){
+  const liveCard = DATA.decks[card.deckId]?.cards?.find(x=>x.id===card.id) || card;
+  starBtn.textContent = liveCard.starred ? "★ Unstar" : "★ Star";
+  starBtn.onclick = ()=>{
+    const dk = DATA.decks[card.deckId];
+    const ci = dk?.cards?.findIndex(x=>x.id===card.id);
+    if (ci >= 0) dk.cards[ci].starred = !dk.cards[ci].starred;
+    saveData(DATA);
+    if (st.active?.card?.id === card.id) st.active.card.starred = dk.cards[ci].starred;
+    const pqi = st.primaryQueue.findIndex(c=>c.id===card.id);
+    if (pqi>=0) st.primaryQueue[pqi].starred = dk.cards[ci].starred;
+    st.sess.starred += 1;
+    refresh();
+  };
+}
 
     if (card.frontImage){
       frontImg.src = card.frontImage;
@@ -3442,7 +3448,25 @@ if (skipBtn) skipBtn.onclick = ()=>{
     if (id === "mastered") rateWithLabel("mastered", 5);
   };
 });
-
+const prevBtn = document.getElementById("prevBtn");
+if (prevBtn) prevBtn.onclick = ()=>{
+  if (st.phase === "revealed") return; // only from question phase
+  if (st.isRequeue){
+    if (st.reqIdx > 0) st.reqIdx--;
+  } else {
+    if (st.idx > 0) st.idx--;
+  }
+  st.input = "";
+  st.result = null;
+  st.mc = null;
+  st.mcPicked = null;
+  st.phase = "question";
+  st.revealedBySpace = false;
+  st.active = null;
+  st.justAdvanced = true;
+  pickNextActive();
+  refresh();
+};
   window.__studyKeyHandler = (e)=>{
     if (SCREEN !== "study") return;
 
