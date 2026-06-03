@@ -78,6 +78,8 @@
 
     .app{display:flex;min-height:100vh}
     .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:22px;flex-shrink:0}
+@media(max-width:768px){.sidebar{display:none!important}}
+
     .logo{display:flex;align-items:center;gap:10px}
     .logo .mark{color:var(--purple);font-size:22px}
     .logo .word{font-weight:800;letter-spacing:.15em;font-size:14px}
