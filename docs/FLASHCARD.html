@@ -293,6 +293,7 @@
  * STORAGE + SETTINGS
  ******************************************************************/
 const STORAGE_KEY = "recall_full_final_v1";
+const DECK_COLORS = ["#818cf8","#4ade80","#fb923c","#f87171","#22d3ee","#a78bfa","#fbbf24","#34d399","#f472b6","#60a5fa"];
 const DEFAULT_DAILY_GOAL = 150;
 
 const INIT = {
@@ -401,6 +402,7 @@ function normalizeData(d){
   if (d.settings.masteredReviewPerDay == null) d.settings.masteredReviewPerDay = 15;
   if (!d.settings.masteredHandling) d.settings.masteredHandling = "mix";
   if (!d.settings.wrongHandling) d.settings.wrongHandling = "front";
+  if (!d.settings.deckColors) d.settings.deckColors = {};
   if (!d.decks) d.decks = {};
   for (const deck of Object.values(d.decks)){
     if (!deck.studyOrder) deck.studyOrder = "random";
@@ -408,7 +410,20 @@ function normalizeData(d){
   }
   return d;
 }
-
+function calcStreak(){
+  const goal = getDailyGoal();
+  let streak = 0;
+  for (let i = 0; i < 365; i++){
+    const ds = localDateStr(new Date(Date.now() - i*86400000));
+    const rev = Number(DATA.stats[ds]?.reviewed || 0);
+    if (rev >= goal) streak++;
+    else if (ds !== todayStr()) break;
+  }
+  return streak;
+}
+function getDeckColor(deckId){
+  return DATA.settings?.deckColors?.[deckId] || DECK_COLORS[0];
+}
 function getDailyGoal(){ return Number(DATA.settings?.dailyGoal || DEFAULT_DAILY_GOAL); }
 function getMasteredReviewPerDay(){ return Number(DATA.settings?.masteredReviewPerDay ?? 15); }
 function getMutedToday(){ return DATA.settings?.mutedDecksByDay?.[todayStr()] || []; }
@@ -604,7 +619,8 @@ function makeCard({id, front, back, frontImage=null, backImage=null, createdAtId
     adaptiveThreshold: 3,
     adaptiveMode: "typed",
     adaptivePref: "cloze",
-    starred: false
+    starred: false,
+    note: ""
   };
 }
 function normalizeCard(card){
@@ -615,7 +631,8 @@ function normalizeCard(card){
   if (card.adaptiveThreshold == null) card.adaptiveThreshold = 3;
   if (!card.adaptiveMode) card.adaptiveMode = "typed";
   if (!card.adaptivePref) card.adaptivePref = "cloze";
-  if (card.starred == null) card.starred = false;
+ if (card.starred == null) card.starred = false;
+  if (card.note == null) card.note = "";
   return card;
 }
 
@@ -646,6 +663,20 @@ function interleaveBuckets(listByDeck){
     .filter(([,cards])=>cards.length)
     .map(([deckId,cards])=>({deckId,cards,i:0}));
   const mode = DATA.settings?.studyMode || "mixed_random";
+
+  // STRICT INTERLEAVE: Bio1,Chem1,Psych1,Orgo1,Bio2,Chem2...
+  if (mode === "strict_interleave"){
+    const out = [];
+    let moved = true;
+    while (moved){
+      moved = false;
+      for (const q of queues){
+        if (q.i < q.cards.length){ out.push({...q.cards[q.i], deckId:q.deckId}); q.i++; moved=true; }
+      }
+    }
+    return out;
+  }
+
   const base = (mode === "mixed_random") ? shuffle(queues) : queues;
   const out = [];
   let moved = true;
@@ -653,11 +684,7 @@ function interleaveBuckets(listByDeck){
     moved = false;
     const cycle = (mode === "mixed_random") ? shuffle(base) : base;
     for (const q of cycle){
-      if (q.i < q.cards.length){
-        out.push({...q.cards[q.i], deckId:q.deckId});
-        q.i++;
-        moved = true;
-      }
+      if (q.i < q.cards.length){ out.push({...q.cards[q.i], deckId:q.deckId}); q.i++; moved=true; }
     }
   }
   return (mode === "mixed_random") ? shuffle(out) : out;
@@ -962,6 +989,7 @@ function sidebarHTML(){
       
       <div class="tiny" style="color:var(--muted2);font-weight:900;letter-spacing:.1em;text-transform:uppercase">Study Mode</div>
       <select id="studyModeSel" class="btnSmall" style="background:var(--panel);width:100%">
+      <option value="strict_interleave" ${DATA.settings?.studyMode==='strict_interleave'?'selected':''}>🔄 Strict Interleave ★</option>
         <option value="mixed_random" ${DATA.settings?.studyMode==='mixed_random'?'selected':''}>Mixed Random</option>
         <option value="round_robin" ${DATA.settings?.studyMode==='round_robin'?'selected':''}>Round Robin</option>
       </select>
@@ -1038,7 +1066,7 @@ function dailyProgressHTML(){
   return `
     <div class="progressCard" style="margin-bottom:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <div style="font-size:14px;font-weight:900">Today's Progress</div>
+        <div style="display:flex;align-items:center;gap:14px">   <div style="font-size:14px;font-weight:900">Today's Progress</div>   ${(()=>{ const s=calcStreak(); return s>0?`<span style="color:var(--orange);font-weight:900;font-size:13px">🔥 ${s}-day streak</span>`:''; })()} </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <span class="tag orange">Reviewed: ${reviewed}/${goal}</span>
           <span class="tag green">✓ ${st.correct||0}</span>
@@ -1151,7 +1179,7 @@ function dashboardHTML(){
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
               <div class="pct">${pctMaster}%</div>
-              <button class="btnSmall" data-mute-deck="${id}" style="padding:4px 8px">${muted?"Unmute":"Mute"}</button>
+              <button class="btnSmall" data-mute-deck="${id}" style="padding:4px 8px">${muted?"Unmute":"Mute"}</button> <button class="btnSmall" data-manual-update="${id}" style="color:var(--cyan);border-color:rgba(34,211,238,.25)">✏️ Update Seen</button>
             </div>
           </div>
           <div class="meta">${cards.length} cards · <span style="color:var(--green);font-weight:900">${mastered} mastered</span></div>
@@ -1203,7 +1231,61 @@ function dashboardHTML(){
 
   return `${headerHTML(false)}${dailyProgressHTML()}${subjects}${overview}`;
 }
-
+function showManualUpdateModal(deckId){
+  const deck = DATA.decks[deckId]; if (!deck) return;
+  const cards = (deck.cards||[]).map(c=>normalizeCard(c));
+  const already = cards.filter(c=>(c.seenCount||0)>0).length;
+  const total = cards.length;
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px";
+  overlay.innerHTML = `
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:24px;width:100%;max-width:480px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:900;font-size:15px">✏️ Update Seen — ${escapeHTML(deck.name)}</span>
+        <button id="closeModal" style="background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:4px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">
+        ${total} total cards. <strong style="color:var(--green)">${already} already seen.</strong><br>
+        Mark the first N cards as seen×1 (won't downgrade cards already seen more).
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="modalN" value="${already}" min="0" max="${total}"
+          style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:8px 12px;font-size:14px;color:var(--text)">
+        <input type="range" id="modalRange" min="0" max="${total}" value="${already}"
+          style="flex:1;accent-color:var(--purple)">
+        <span id="modalLabel" style="font-size:12px;color:var(--cyan);font-weight:900;min-width:60px">of ${total}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="applyModal" style="flex:1;background:var(--purple);border:none;border-radius:10px;color:#fff;font-weight:900;padding:10px 18px;cursor:pointer">Apply</button>
+        <button id="cancelModal" style="background:transparent;border:1px solid var(--border);border-radius:9px;color:var(--muted);padding:10px 14px;cursor:pointer">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const numInput = overlay.querySelector("#modalN");
+  const rangeInput = overlay.querySelector("#modalRange");
+  numInput.oninput = ()=>{ rangeInput.value = numInput.value; };
+  rangeInput.oninput = ()=>{ numInput.value = rangeInput.value; };
+  const close = ()=> document.body.removeChild(overlay);
+  overlay.querySelector("#closeModal").onclick = close;
+  overlay.querySelector("#cancelModal").onclick = close;
+  overlay.onclick = (e)=>{ if(e.target===overlay) close(); };
+  overlay.querySelector("#applyModal").onclick = ()=>{
+    const n = Math.min(total, Math.max(0, Number(numInput.value||0)));
+    updateData(d=>{
+      const dk = d.decks[deckId];
+      const sorted = [...dk.cards].sort((a,b)=>(a.createdAtIdx??0)-(b.createdAtIdx??0));
+      sorted.forEach((c,i)=>{
+        const idx = dk.cards.findIndex(x=>x.id===c.id);
+        if(idx<0) return;
+        if(i < n && (dk.cards[idx].seenCount||0) === 0){
+          dk.cards[idx].seenCount = 1;
+          dk.cards[idx].lastSeenOn = dk.cards[idx].lastSeenOn || todayStr();
+        }
+      });
+    });
+    close();
+  };
+}
 function bindDashboard(){
   const a = document.getElementById("studyAllBtn");
   if (a) a.onclick = ()=> setScreen("study");
@@ -1220,6 +1302,9 @@ if (unmuteBtn) unmuteBtn.onclick = ()=> {
     d.settings.mutedDecksByDay[t] = [];
   });
 };
+  document.querySelectorAll("[data-manual-update]").forEach(btn=>{
+  btn.onclick = ()=> showManualUpdateModal(btn.dataset.manualUpdate);
+});
  document.querySelectorAll("[data-mute-deck]").forEach(btn=>{
   btn.onclick = ()=> {
     window.__study = null;
@@ -2413,6 +2498,10 @@ function bindManage(){
             <option value="random" ${deck.studyOrder==="random"?"selected":""}>Order: Random</option>
             <option value="inorder" ${deck.studyOrder==="inorder"?"selected":""}>Order: In order</option>
           </select>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+  <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.09em;color:var(--muted2)">Color:</span>
+  ${DECK_COLORS.map(c=>`<div data-color="${c}" style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${getDeckColor(selected)===c?'#fff':'transparent'};transition:transform .15s" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform='scale(1)'"></div>`).join('')}
+</div>
           <button class="btnSmall" id="newCardBtn">+ Card</button>
           <button class="btnSmall" id="bulkAddToggleBtn"
             style="color:var(--cyan);border-color:rgba(34,211,238,.28);${bulkOpen?'background:rgba(34,211,238,.10)':''}">
@@ -2475,6 +2564,12 @@ function bindManage(){
     deckPanel.querySelectorAll("[data-filter]").forEach(b=>{
       b.onclick = ()=>{ filter = b.dataset.filter; renderPanel(); };
     });
+    deckPanel.querySelectorAll("[data-color]").forEach(sw=>{
+  sw.onclick = ()=> updateData(d=>{
+    if(!d.settings.deckColors) d.settings.deckColors={};
+    d.settings.deckColors[selected] = sw.dataset.color;
+  });
+});
     deckPanel.querySelector("#deleteDeckBtn").onclick = ()=>{
       if (!confirm("Delete this deck?")) return;
       updateData(d=>{
@@ -2713,7 +2808,8 @@ if (!shouldPreserve) {
       justAdvanced: true,
       isCustomMode,
       editMode: false,
-      skipCount: 0
+      skipCount: 0,
+      lastRatingSnapshot: null,
     };
   } else {
     if (window.__study.editMode == null) window.__study.editMode = false;
@@ -2775,7 +2871,7 @@ ${rateBtn("Mastered","to mastered deck","var(--purple)","mastered",true)}
           </div>
           <div class="hint" style="text-align:center">Wrong = requeue · Correct = move on · Mastered = mastered deck</div>
         </div>
-
+<button id="undoRatingBtn" class="btnSmall" style="color:var(--purple);border-color:rgba(129,140,248,.3);display:none">↩ Undo</button>
  <!-- edit panel -->
 <div id="editPanel" style="display:none;flex-direction:column;gap:12px;background:var(--panel);border:1px solid rgba(129,140,248,.35);border-radius:16px;padding:20px">
   <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2881,6 +2977,26 @@ function bindStudy(){
   const sst          = document.getElementById("sst");
   const sleft        = document.getElementById("sleft");
   const stimer       = document.getElementById("stimer");
+  const undoBtn = document.getElementById("undoRatingBtn");
+if (undoBtn) undoBtn.onclick = ()=>{
+  const snap = st.lastRatingSnapshot; if(!snap) return;
+  updateData(d=>{
+    const dk = d.decks[snap.deckId];
+    const ci = dk?.cards?.findIndex(c=>c.id===snap.cardId);
+    if(ci>=0) dk.cards[ci] = snap.cardData;
+    const t = snap.statsDay;
+    if(d.stats[t]){
+      d.stats[t].reviewed = Math.max(0,(d.stats[t].reviewed||0)-1);
+      if(snap.wasCorrect) d.stats[t].correct = Math.max(0,(d.stats[t].correct||0)-1);
+      else d.stats[t].wrong = Math.max(0,(d.stats[t].wrong||0)-1);
+    }
+  });
+  if(snap.wasCorrect){ st.sess.correct=Math.max(0,st.sess.correct-1); } else { st.sess.wrong=Math.max(0,st.sess.wrong-1); }
+  st.sess.total=Math.max(0,st.sess.total-1);
+  if(st.isRequeue) st.reqIdx=Math.max(0,st.reqIdx-1); else st.idx=Math.max(0,st.idx-1);
+  st.lastRatingSnapshot=null; st.phase="question"; st.input=""; st.result=null; st.active=null; st.justAdvanced=true;
+  pickNextActive(); refresh();
+};
 
   st.sessionStartedAt = st.sessionStartedAt || nowMs();
   const editPanel = document.getElementById("editPanel");
@@ -3270,7 +3386,7 @@ if (masteredBtn){
         backImg.style.display = "none";
       }
     }
-
+if (undoBtn) undoBtn.style.display = st.lastRatingSnapshot ? "inline-flex" : "none";
     sc.textContent = st.sess.correct;
     sw.textContent = st.sess.wrong;
     srq.textContent = st.requeue.length;
@@ -3342,7 +3458,14 @@ function rateWithLabel(label, quality){
   const pressedMastered = label === "mastered";
 
   let newCard;
-
+// Save for undo
+st.lastRatingSnapshot = {
+  cardId: card.id,
+  deckId: card.deckId,
+  cardData: structuredClone(DATA.decks[card.deckId]?.cards?.find(c=>c.id===card.id)||card),
+  wasCorrect: label !== "wrong",
+  statsDay: st.today
+};
   if (pressedWrong){
     newCard = sm2(current, 0);
     newCard.seenCount = (current.seenCount || 0) + 1;
